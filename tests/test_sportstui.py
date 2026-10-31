@@ -752,6 +752,46 @@ class TestSportstui(unittest.TestCase):
         app.draw_card(game, 0, 0, 42, False)
         self.assertIn("CFB", drawn_titles[0])
 
+    def test_timeouts_str_and_card_rendering(self):
+        """Test timeouts dot generation across glyph sets and exact card alignment."""
+        # 1. Test timeouts_str across glyph sets
+        for g_name in ("nerd", "unicode", "emoji", "ascii"):
+            g = sportstui.GLYPHS[g_name]
+            self.assertEqual(sportstui.timeouts_str(g, None), "")
+            self.assertEqual(sportstui.timeouts_str(g, "bad"), "")
+
+            t3 = sportstui.timeouts_str(g, 3)
+            t2 = sportstui.timeouts_str(g, 2)
+            t1 = sportstui.timeouts_str(g, 1)
+            t0 = sportstui.timeouts_str(g, 0)
+
+            # Check counts
+            self.assertEqual(t3.count(g["timeout"]), 3)
+            self.assertEqual(t2.count(g["timeout"]), 2)
+            self.assertEqual(t2.count(g["timeout_used"]), 1)
+            self.assertEqual(t1.count(g["timeout"]), 1)
+            self.assertEqual(t1.count(g["timeout_used"]), 2)
+            self.assertEqual(t0.count(g["timeout_used"]), 3)
+
+        # 2. Test row formatting in card with timeouts
+        opts = sportstui.parse_args(["--glyphs", "unicode"])
+        app = sportstui.App(None, opts)
+        live_game = {
+            "id": "1",
+            "league": "cfb",
+            "state": "in",
+            "situation": {"away_timeouts": 2, "home_timeouts": 0},
+            "away": {"id": "1", "abbr": "ND", "record": "6-1", "rank": 5, "score": "20", "score_int": 20, "color": "0C2340"},
+            "home": {"id": "2", "abbr": "NAVY", "record": "2-5", "rank": None, "score": "13", "score_int": 13, "color": "00205B"},
+        }
+        away_row = app._team_cell_text(live_game, live_game["away"], True, 40)
+        self.assertEqual(sportstui.str_width(away_row), 40)
+        self.assertTrue(away_row.endswith("●●○  20"), f"Expected row to end with '●●○  20', got {away_row!r}")
+
+        home_row = app._team_cell_text(live_game, live_game["home"], False, 40)
+        self.assertEqual(sportstui.str_width(home_row), 40)
+        self.assertTrue(home_row.endswith("○○○  13"), f"Expected row to end with '○○○  13', got {home_row!r}")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1032,6 +1032,25 @@ def team_row_prefix(lead, star, rank_num):
     return prefix_7 + " "
 
 
+def timeouts_str(glyphs, remaining, league="cfb"):
+    """Render remaining timeouts as a row of dots matching cfbtui; empty when unknown."""
+    if remaining is None:
+        return ""
+    try:
+        rem_val = int(remaining)
+    except (TypeError, ValueError):
+        return ""
+    if rem_val < 0:
+        return ""
+    default_total = 1 if league == "nhl" else 3
+    total = max(default_total, rem_val)
+    rem = max(0, min(total, rem_val))
+    used = total - rem
+    t_dot = glyphs.get("timeout", "●")
+    u_dot = glyphs.get("timeout_used", "○")
+    return (t_dot * rem) + (u_dot * used)
+
+
 # --------------------------------------------------------------------------
 # application
 # --------------------------------------------------------------------------
@@ -1715,8 +1734,19 @@ class App:
             abbr = side["abbr"][:5]
             rec = f" {side['record'][:6]}" if side.get("record") else ""
             left = prefix + f"{abbr:<5}{rec}"
+            t_str = ""
+            if live and sit:
+                rem = sit.get("away_timeouts" if is_away else "home_timeouts")
+                t_str = timeouts_str(g, rem, game.get("league", "cfb"))
+
             score = side.get("score") if game["state"] != "pre" else None
-            sc_fmt = f"{score:>3} " if score is not None else "    "
+            if score is not None:
+                if t_str:
+                    sc_fmt = f"{t_str} {score:>3}"
+                else:
+                    sc_fmt = f"{score:>3} "
+            else:
+                sc_fmt = "    "
             pad = max(1, cell_w - str_width(left) - str_width(sc_fmt))
             return left + (" " * pad) + sc_fmt
 
@@ -2048,12 +2078,19 @@ class App:
 
         # 1. Top Full-Bleed Team Banners (matching detail.png)
         banner_w = max(32, max(len(away["full"]), len(home["full"])) + 18)
+        live = game["state"] == "in"
+        sit = game.get("situation") if live else None
         for i, (side, prefix, is_lead) in enumerate(((away, "", aw_lead), (home, "@ ", hm_lead))):
             rk = ("#%d " % side["rank"]) if side["rank"] else ""
             left = " %s%s%s  %s" % (prefix, rk, side["full"], side["record"])
+            t_str = ""
+            if live and sit:
+                rem = sit.get("away_timeouts" if i == 0 else "home_timeouts")
+                t_str = timeouts_str(g, rem, game.get("league", "cfb"))
             sc = str(side["score"]) if game["state"] != "pre" else ""
-            pad = max(2, banner_w - len(left) - len(sc) - 1)
-            line = left + (" " * pad) + sc + " "
+            sc_part = f"{t_str}  {sc}" if t_str else sc
+            pad = max(2, banner_w - str_width(left) - str_width(sc_part) - 1)
+            line = left + (" " * pad) + sc_part + " "
             self.put(top + i, 2, line, self.team_bar_attr(side["color"], bold=is_lead, dim=(final and not is_lead)))
 
         y = top + 2
