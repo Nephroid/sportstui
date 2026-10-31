@@ -17,6 +17,11 @@ sportstui = loader.load_module()
 
 
 class TestSportstui(unittest.TestCase):
+    def test_league_order(self):
+        expected_order = ["cfb", "nfl", "nhl", "nba", "cbb", "mlb"]
+        actual_order = [lg["key"] for lg in sportstui.LEAGUES]
+        self.assertEqual(actual_order, expected_order)
+
     def test_glyph_sets(self):
         for name in ("nerd", "unicode", "emoji", "ascii"):
             self.assertIn(name, sportstui.GLYPHS)

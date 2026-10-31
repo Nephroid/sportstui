@@ -44,11 +44,11 @@ CONFIG_PATH = os.path.expanduser(
 
 LEAGUES = [
     {"key": "cfb", "name": "CFB", "label": "FBS", "path": "football/college-football", "poll": True, "period_prefix": "Q", "reg_periods": 4},
-    {"key": "cbb", "name": "CBB", "label": "NCAAM", "path": "basketball/mens-college-basketball", "poll": True, "period_prefix": "H", "reg_periods": 2},
+    {"key": "nfl", "name": "NFL", "label": "NFL", "path": "football/nfl", "poll": False, "period_prefix": "Q", "reg_periods": 4},
     {"key": "nhl", "name": "NHL", "label": "NHL", "path": "hockey/nhl", "poll": False, "period_prefix": "P", "reg_periods": 3},
     {"key": "nba", "name": "NBA", "label": "NBA", "path": "basketball/nba", "poll": False, "period_prefix": "Q", "reg_periods": 4},
+    {"key": "cbb", "name": "CBB", "label": "NCAAM", "path": "basketball/mens-college-basketball", "poll": True, "period_prefix": "H", "reg_periods": 2},
     {"key": "mlb", "name": "MLB", "label": "MLB", "path": "baseball/mlb", "poll": False, "period_prefix": "", "reg_periods": 9},
-    {"key": "nfl", "name": "NFL", "label": "NFL", "path": "football/nfl", "poll": False, "period_prefix": "Q", "reg_periods": 4},
 ]
 BY_KEY = {lg["key"]: lg for lg in LEAGUES}
 
@@ -1879,7 +1879,7 @@ class App:
         lines = [
             ("NAVIGATION & VIEWS", "accent"),
             ("  Arrow keys / hjkl   Move between game cards (2D grid or list)", "base"),
-            ("  1-6 / Tab           Switch league (CFB, CBB, NHL, NBA, MLB, NFL)" if not self.only else
+            ("  1-6 / Tab           Switch league (CFB, NFL, NHL, NBA, CBB, MLB)" if not self.only else
              "  Standalone Mode     Locked to %s scoreboard" % self.lg()["name"], "base"),
             ("  Enter               Open game detail (linescore, win prob, plays)", "base"),
             ("  R                   Poll rankings (AP / Coaches / CFP side-by-side)", "base"),

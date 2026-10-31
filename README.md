@@ -5,11 +5,11 @@
 `sportstui` is a fast, colorful terminal scoreboard and sports ticker written in pure Python using standard library `curses` and `urllib`. It replicates the exact visual design of `WPTK/cfbtui` — full-bleed team color background bars with WCAG luminance contrast, `★ Favorites` / `Other games` sections, `⚡ UPSET` & `⚑ RED ZONE` heavy card borders, a live bottom `─ticker───` panel, side-by-side poll/standings boxes, and rich play-by-play game detail screens — across six major sports leagues:
 
 - **CFB**: College Football (NCAA FBS)
-- **CBB**: Men's College Basketball (NCAA Division I)
+- **NFL**: National Football League
 - **NHL**: National Hockey League
 - **NBA**: National Basketball Association
+- **CBB**: Men's College Basketball (NCAA Division I)
 - **MLB**: Major League Baseball
-- **NFL**: National Football League
 
 ---
 
@@ -21,11 +21,11 @@ You can run `sportstui` as a combined multi-league app or launch directly into a
 | :--- | :--- | :--- |
 | `sportstui` | **All** | Combined multi-league scoreboard (press `1`–`6` or `Tab` to switch) |
 | `cfbtui` | **CFB** | College Football scoreboard & Top 25 rankings |
-| `cbbtui` / `ncaabtui` | **CBB** | Men's College Basketball & Top 25 rankings |
-| `nbatui` | **NBA** | NBA scoreboard, standings, and box scores |
-| `nhltui` | **NHL** | NHL scoreboard, standings, and division tables |
-| `mlbtui` | **MLB** | Major League Baseball scoreboard and standings |
 | `nfltui` | **NFL** | NFL scoreboard, weekly slates, and division standings |
+| `nhltui` | **NHL** | NHL scoreboard, standings, and division tables |
+| `nbatui` | **NBA** | NBA scoreboard, standings, and box scores |
+| `cbbtui` / `ncaabtui` | **CBB** | Men's College Basketball & Top 25 rankings |
+| `mlbtui` | **MLB** | Major League Baseball scoreboard and standings |
 
 ---
 
@@ -33,7 +33,7 @@ You can run `sportstui` as a combined multi-league app or launch directly into a
 
 | Key | Action |
 | :--- | :--- |
-| `1` – `6` / `Tab` | Switch between CFB, CBB, NHL, NBA, MLB, and NFL *(combined mode only)* |
+| `1` – `6` / `Tab` | Switch between CFB, NFL, NHL, NBA, CBB, and MLB *(combined mode only)* |
 | `[` / `]` | Previous / next day |
 | `w` / `W` | Next / previous week *(CFB and NFL only)* |
 | `t` | Jump to today's games |
