@@ -61,6 +61,130 @@ DEFAULT_FAVORITES = [
     "nfl:DET",
 ]
 
+LEAGUE_GROUPS = {
+    "cfb": [
+        ("5", "Big Ten"),
+        ("8", "SEC"),
+        ("1", "ACC"),
+        ("4", "Big 12"),
+        ("151", "American"),
+        ("15", "MAC"),
+        ("17", "Mountain West"),
+        ("37", "Sun Belt"),
+        ("12", "Conference USA"),
+        ("9", "Pac-12"),
+        ("18", "FBS Independents"),
+    ],
+    "cbb": [
+        ("7", "Big Ten"),
+        ("23", "SEC"),
+        ("2", "ACC"),
+        ("8", "Big 12"),
+        ("4", "Big East"),
+        ("62", "American"),
+        ("3", "Atlantic 10"),
+        ("44", "Mountain West"),
+        ("29", "WCC"),
+        ("1", "America East"),
+        ("46", "ASUN"),
+        ("5", "Big Sky"),
+        ("6", "Big South"),
+        ("9", "Big West"),
+        ("10", "CAA"),
+        ("11", "Conference USA"),
+        ("45", "Horizon"),
+        ("12", "Ivy League"),
+        ("13", "MAAC"),
+        ("14", "MAC"),
+        ("16", "MEAC"),
+        ("18", "MVC"),
+        ("19", "NEC"),
+        ("20", "OVC"),
+        ("22", "Patriot"),
+        ("24", "SoCon"),
+        ("25", "Southland"),
+        ("26", "SWAC"),
+        ("49", "Summit"),
+        ("27", "Sun Belt"),
+        ("30", "UAC"),
+    ],
+    "nfl": [
+        ("afc", "AFC"),
+        ("nfc", "NFC"),
+        ("afc_east", "AFC East"),
+        ("afc_north", "AFC North"),
+        ("afc_south", "AFC South"),
+        ("afc_west", "AFC West"),
+        ("nfc_east", "NFC East"),
+        ("nfc_north", "NFC North"),
+        ("nfc_south", "NFC South"),
+        ("nfc_west", "NFC West"),
+    ],
+    "nba": [
+        ("east", "Eastern Conference"),
+        ("west", "Western Conference"),
+        ("atlantic", "Atlantic"),
+        ("central", "Central"),
+        ("southeast", "Southeast"),
+        ("northwest", "Northwest"),
+        ("pacific", "Pacific"),
+        ("southwest", "Southwest"),
+    ],
+    "nhl": [
+        ("east", "Eastern Conference"),
+        ("west", "Western Conference"),
+        ("atlantic", "Atlantic"),
+        ("metropolitan", "Metropolitan"),
+        ("central", "Central"),
+        ("pacific", "Pacific"),
+    ],
+    "mlb": [
+        ("al", "American League"),
+        ("nl", "National League"),
+        ("al_east", "AL East"),
+        ("al_central", "AL Central"),
+        ("al_west", "AL West"),
+        ("nl_east", "NL East"),
+        ("nl_central", "NL Central"),
+        ("nl_west", "NL West"),
+    ],
+}
+
+PRO_TEAM_GROUPS = {
+    "nfl": {
+        "BUF": ("afc", "afc_east"), "MIA": ("afc", "afc_east"), "NE": ("afc", "afc_east"), "NYJ": ("afc", "afc_east"),
+        "BAL": ("afc", "afc_north"), "CIN": ("afc", "afc_north"), "CLE": ("afc", "afc_north"), "PIT": ("afc", "afc_north"),
+        "HOU": ("afc", "afc_south"), "IND": ("afc", "afc_south"), "JAX": ("afc", "afc_south"), "TEN": ("afc", "afc_south"),
+        "DEN": ("afc", "afc_west"), "KC": ("afc", "afc_west"), "LAC": ("afc", "afc_west"), "LV": ("afc", "afc_west"),
+        "DAL": ("nfc", "nfc_east"), "NYG": ("nfc", "nfc_east"), "PHI": ("nfc", "nfc_east"), "WSH": ("nfc", "nfc_east"),
+        "CHI": ("nfc", "nfc_north"), "DET": ("nfc", "nfc_north"), "GB": ("nfc", "nfc_north"), "MIN": ("nfc", "nfc_north"),
+        "ATL": ("nfc", "nfc_south"), "CAR": ("nfc", "nfc_south"), "NO": ("nfc", "nfc_south"), "TB": ("nfc", "nfc_south"),
+        "ARI": ("nfc", "nfc_west"), "LAR": ("nfc", "nfc_west"), "SEA": ("nfc", "nfc_west"), "SF": ("nfc", "nfc_west"),
+    },
+    "nba": {
+        "BOS": ("east", "atlantic"), "BKN": ("east", "atlantic"), "NY": ("east", "atlantic"), "PHI": ("east", "atlantic"), "TOR": ("east", "atlantic"),
+        "CHI": ("east", "central"), "CLE": ("east", "central"), "DET": ("east", "central"), "IND": ("east", "central"), "MIL": ("east", "central"),
+        "ATL": ("east", "southeast"), "CHA": ("east", "southeast"), "MIA": ("east", "southeast"), "ORL": ("east", "southeast"), "WSH": ("east", "southeast"),
+        "DEN": ("west", "northwest"), "MIN": ("west", "northwest"), "OKC": ("west", "northwest"), "POR": ("west", "northwest"), "UTAH": ("west", "northwest"),
+        "GS": ("west", "pacific"), "LAC": ("west", "pacific"), "LAL": ("west", "pacific"), "PHX": ("west", "pacific"), "SAC": ("west", "pacific"),
+        "DAL": ("west", "southwest"), "HOU": ("west", "southwest"), "MEM": ("west", "southwest"), "NO": ("west", "southwest"), "SA": ("west", "southwest"),
+    },
+    "nhl": {
+        "BOS": ("east", "atlantic"), "BUF": ("east", "atlantic"), "DET": ("east", "atlantic"), "FLA": ("east", "atlantic"), "MTL": ("east", "atlantic"), "OTT": ("east", "atlantic"), "TB": ("east", "atlantic"), "TOR": ("east", "atlantic"),
+        "CAR": ("east", "metropolitan"), "CBJ": ("east", "metropolitan"), "NJ": ("east", "metropolitan"), "NYI": ("east", "metropolitan"), "NYR": ("east", "metropolitan"), "PHI": ("east", "metropolitan"), "PIT": ("east", "metropolitan"), "WSH": ("east", "metropolitan"),
+        "CHI": ("west", "central"), "COL": ("west", "central"), "DAL": ("west", "central"), "MIN": ("west", "central"), "NSH": ("west", "central"), "STL": ("west", "central"), "UTA": ("west", "central"), "WPG": ("west", "central"),
+        "ANA": ("west", "pacific"), "CGY": ("west", "pacific"), "EDM": ("west", "pacific"), "LA": ("west", "pacific"), "SEA": ("west", "pacific"), "SJ": ("west", "pacific"), "VAN": ("west", "pacific"), "VGK": ("west", "pacific"),
+    },
+    "mlb": {
+        "BAL": ("al", "al_east"), "BOS": ("al", "al_east"), "NYY": ("al", "al_east"), "TB": ("al", "al_east"), "TOR": ("al", "al_east"),
+        "CHW": ("al", "al_central"), "CLE": ("al", "al_central"), "DET": ("al", "al_central"), "KC": ("al", "al_central"), "MIN": ("al", "al_central"),
+        "ATH": ("al", "al_west"), "OAK": ("al", "al_west"), "HOU": ("al", "al_west"), "LAA": ("al", "al_west"), "SEA": ("al", "al_west"), "TEX": ("al", "al_west"),
+        "ATL": ("nl", "nl_east"), "MIA": ("nl", "nl_east"), "NYM": ("nl", "nl_east"), "PHI": ("nl", "nl_east"), "WSH": ("nl", "nl_east"),
+        "CHC": ("nl", "nl_central"), "CIN": ("nl", "nl_central"), "MIL": ("nl", "nl_central"), "PIT": ("nl", "nl_central"), "STL": ("nl", "nl_central"),
+        "ARI": ("nl", "nl_west"), "COL": ("nl", "nl_west"), "LAD": ("nl", "nl_west"), "SD": ("nl", "nl_west"), "SF": ("nl", "nl_west"),
+    },
+}
+
 GLYPHS = {
     "nerd": {
         "tl": "╭", "tr": "╮", "bl": "╰", "br": "┘",
@@ -204,6 +328,10 @@ def copy_to_clipboard(text):
 
 def scoreboard_url(lg, date, week=None):
     url = "%s/%s/scoreboard?limit=250" % (SITE, lg["path"])
+    if lg["key"] == "cfb":
+        url += "&groups=80"
+    elif lg["key"] == "cbb":
+        url += "&groups=50"
     if week is not None and lg["key"] in ("cfb", "nfl"):
         url += "&week=%d" % week
     elif date is not None:
@@ -795,8 +923,12 @@ class App:
         self.week = getattr(opts, "week", None)
         self.layout = opts.layout or self.cfg.get("layout") or "grid"
         self.glyphs = opts.glyphs or self.cfg.get("glyphs") or "nerd"
-        self.view = "board"          # board | extra | detail | news | help
+        self.view = "board"          # board | extra | detail | news | help | group_picker
         self.filter = "all"
+        self.group_filter = None     # conference or division ID/key
+        self.group_name = None       # human display name
+        self.picker_sel = 0
+        self.picker_scroll = 0
         self.sel_id = None
         self.scroll = 0
         self.extra_kind = None       # ranks | stand
@@ -812,12 +944,13 @@ class App:
         self.notice = ("", 0.0)
         self.last_error = ""
         self.init_colors()
-        try:
-            curses.curs_set(0)
-        except curses.error:
-            pass
-        self.scr.keypad(True)
-        self.scr.timeout(200)
+        if self.scr:
+            try:
+                curses.curs_set(0)
+            except curses.error:
+                pass
+            self.scr.keypad(True)
+            self.scr.timeout(200)
 
     # -- config ------------------------------------------------------------
     def load_config(self):
@@ -844,6 +977,10 @@ class App:
 
     # -- colours -----------------------------------------------------------
     def init_colors(self):
+        if not self.scr:
+            self.colours = False
+            self.pairs = {}
+            return
         self.colours = curses.has_colors()
         self.pairs = {}
         self.next_pair = 20
@@ -1022,6 +1159,15 @@ class App:
 
     def visible(self, games):
         rows = list(games or [])
+        if self.group_filter and self.group_filter != "all":
+            if self.league_key in ("cfb", "cbb"):
+                rows = [g for g in rows if g["away"].get("conf_id") == self.group_filter or g["home"].get("conf_id") == self.group_filter]
+            else:
+                mapping = PRO_TEAM_GROUPS.get(self.league_key, {})
+                rows = [
+                    g for g in rows
+                    if self.group_filter in mapping.get(g["away"]["abbr"], ()) or self.group_filter in mapping.get(g["home"]["abbr"], ())
+                ]
         if self.filter == "live":
             rows = [g for g in rows if g["state"] == "in"]
         elif self.filter == "top25":
@@ -1129,14 +1275,16 @@ class App:
 
         # Bottom 2 rows are always StatusBar + Footer keybar.
         # On the board view (when height >= 24), 6 rows above StatusBar are the cfbtui ticker!
-        show_ticker = (self.view == "board" and h >= 24)
+        show_ticker = (self.view in ("board", "group_picker") and h >= 24)
         ticker_h = 6 if show_ticker else 0
         body_h = h - body_top - 2 - ticker_h
 
-        if self.view == "board":
+        if self.view in ("board", "group_picker"):
             self.draw_board(body_top, body_h, w)
             if show_ticker:
                 self.draw_ticker(h - 2 - ticker_h, ticker_h, w)
+            if self.view == "group_picker":
+                self.draw_group_picker(h, w)
         elif self.view == "extra":
             self.draw_extra(body_top, body_h, w)
         elif self.view == "detail":
@@ -1206,6 +1354,8 @@ class App:
         notes = [self.layout]
         if self.filter != "all":
             notes.append(self.filter)
+        if self.group_name:
+            notes.append(self.group_name)
         note_str = " · ".join(notes)
 
         live_cnt = sum(1 for gm in games if gm["state"] == "in")
@@ -1238,13 +1388,17 @@ class App:
             elif self.view == "news":
                 items.insert(1, ("⏎", "Read"))
                 items.insert(2, ("o", "Browser"))
+        elif self.view == "group_picker":
+            items = [("esc", "Cancel"), ("⏎", "Select"), ("q", "Quit")]
         else:
+            is_college = self.league_key in ("cfb", "cbb")
             items = [
                 ("q", "Quit"),
                 ("?", "Help"),
                 ("⏎", "Detail"),
                 ("v", "Layout"),
                 ("l", "Filter"),
+                ("o", "Conf" if is_college else "Div"),
                 ("R", "Rankings"),
                 ("T", "Standings"),
                 ("N", "News"),
@@ -1316,7 +1470,7 @@ class App:
 
     # -- board -------------------------------------------------------------
     def grid_cols(self, width):
-        cw = 36
+        cw = 42
         return max(1, (width - 1) // (cw + 1))
 
     def draw_board(self, top, height, width):
@@ -1350,11 +1504,11 @@ class App:
         # Build visual display lines: ("header", text) or ("game", game_index, game)
         vlines = []
         if starred:
-            vlines.append(("header", "%s Favorites" % g["star"]))
+            vlines.append(("header", "  %s Favorites" % g["star"]))
             for gm in starred:
                 vlines.append(("game", rows.index(gm), gm))
             if rest:
-                vlines.append(("header", "Other games"))
+                vlines.append(("header", "  Other games"))
         for gm in rest:
             vlines.append(("game", rows.index(gm), gm))
 
@@ -1378,22 +1532,43 @@ class App:
             self.clear_line(y)
             item = vlines[vi]
             if item[0] == "header":
-                self.put(y, 1, item[1], self.attr("section"))
+                self.put(y, 0, item[1], self.attr("section"))
             else:
                 _, g_idx, game = item
                 self.draw_list_row(game, y, width, g_idx == idx)
 
-    def _team_cell_text(self, game, side, is_away, cell_w=21):
+    def _team_cell_text(self, game, side, is_away, cell_w=40):
         g = self.g()
         live = game["state"] == "in"
         sit = game.get("situation") if live else None
-        poss = g["poss"] if (sit and sit.get("possession") == side["id"] and side["id"]) else " "
-        star = g["star"] if self.is_fav(side) else " "
-        rk = ("#%d" % side["rank"]) if side["rank"] else ""
-        left = "%s%s%3s %-5s %-6s" % (poss, star, rk, side["abbr"][:5], side["record"][:6])
-        score = str(side["score"]) if game["state"] != "pre" else ""
-        pad = max(1, cell_w - len(left) - len(score) - 1)
-        return left + (" " * pad) + score + " "
+        poss = g["poss"] if (sit and sit.get("possession") == side["id"] and side["id"]) else ""
+        fav = self.is_fav(side)
+        if poss:
+            icon = "%s " % poss
+        elif fav:
+            icon = "%s " % g["star"]
+        else:
+            icon = ""
+
+        rk_str = ("#%d" % side["rank"]) if side["rank"] else ""
+
+        # In card mode (cell_w >= 36), exact 19-char aligned block matching cfbtui:
+        # Every team abbr starts at column 7, every record starts at column 13
+        if cell_w >= 36:
+            if fav or poss:
+                tag = "  %s%s" % (icon, rk_str.ljust(3))
+            else:
+                tag = "   %s" % ((rk_str + " ").ljust(4) if rk_str else "    ")
+            left = "%s%-5s %-6s" % (tag, side["abbr"][:5], side["record"][:6])
+            score_str = str(side["score"]) if game["state"] != "pre" else ""
+            score_fmt = ("%2s" % score_str) if score_str else ""
+            pad = max(1, cell_w - len(left) - len(score_fmt))
+            return left + (" " * pad) + score_fmt
+        # In compact list mode (cell_w around 21)
+        left = "%s%s%-5s %-6s" % (icon if fav or poss else "", (rk_str + " ") if rk_str else "", side["abbr"][:5], side["record"][:6])
+        score_str = str(side["score"]) if game["state"] != "pre" else ""
+        pad = max(1, cell_w - len(left) - len(score_str))
+        return left + (" " * pad) + score_str
 
     def draw_list_row(self, game, y, width, selected):
         g = self.g()
@@ -1406,8 +1581,8 @@ class App:
         aw_attr = self.team_bar_attr(away["color"], bold=aw_lead, dim=(final and hm_lead))
         hm_attr = self.team_bar_attr(home["color"], bold=hm_lead, dim=(final and aw_lead))
 
-        aw_txt = self._team_cell_text(game, away, True, 22)
-        hm_txt = self._team_cell_text(game, home, False, 22)
+        aw_txt = self._team_cell_text(game, away, True, 21)
+        hm_txt = self._team_cell_text(game, home, False, 21)
 
         cursor = "▸" if selected else " "
         status = self.status_text(game)
@@ -1416,11 +1591,11 @@ class App:
         sit = game.get("situation")
 
         segs = [
-            (cursor, self.attr("focus") if selected else self.attr("base")),
+            (cursor + " ", self.attr("focus") if selected else self.attr("base")),
             (aw_txt, aw_attr),
-            (" %s " % g["at"], self.attr("focus") if selected else self.attr("dim")),
+            (" @ ", self.attr("focus") if selected else self.attr("dim")),
             (hm_txt, hm_attr),
-            ("  " + status, self.attr("live") if live else (self.attr("focus") if selected else self.attr("base"))),
+            ("   " + status, self.attr("live") if live else (self.attr("focus") if selected else self.attr("base"))),
         ]
         if extra:
             segs.append(("  " + extra, self.attr("dim")))
@@ -1434,7 +1609,7 @@ class App:
     # -- grid layout (cfbtui grid.png exact style) -------------------------
     def draw_grid(self, rows, top, height, width):
         g = self.g()
-        cw, ch = 36, 5
+        cw, ch = 42, 5
         cols = self.grid_cols(width)
         idx = self.selected_index(rows)
 
@@ -1444,12 +1619,12 @@ class App:
         # Build grid bands: either ("header", y_height=1, text) or ("card_row", y_height=5, [(g_idx, game), ...])
         bands = []
         if starred:
-            bands.append(("header", 1, "%s Favorites" % g["star"]))
+            bands.append(("header", 1, "  %s Favorites" % g["star"]))
             for r_start in range(0, len(starred), cols):
                 chunk = [(rows.index(gm), gm) for gm in starred[r_start:r_start + cols]]
                 bands.append(("cards", ch, chunk))
             if rest:
-                bands.append(("header", 1, "Other games"))
+                bands.append(("header", 1, "  Other games"))
         for r_start in range(0, len(rest), cols):
             chunk = [(rows.index(gm), gm) for gm in rest[r_start:r_start + cols]]
             bands.append(("cards", ch, chunk))
@@ -1478,7 +1653,7 @@ class App:
             if y + bh > top + height:
                 break
             if btype == "header":
-                self.put(y, 1, payload, self.attr("section"))
+                self.put(y, 0, payload, self.attr("section"))
                 y += 1
             else:
                 for col_i, (gi, game) in enumerate(payload):
@@ -1534,13 +1709,13 @@ class App:
         # Status row (row 3 inside card)
         status = self.status_text(game)
         extra = self.extra_text(game)
-        pad = max(1, inner - len(status) - len(extra) - 2)
+        pad = max(1, inner - len(status) - len(extra) - 1)
         st_attr = self.attr("live") if live else (self.attr("focus") if selected else self.attr("base"))
         self.fill_line(y + 3, x + 1, inner, self.attr("base"))
         segs = [
             (" " + status, st_attr),
             (" " * pad, self.attr("base")),
-            (extra + " ", self.attr("dim")),
+            (extra, self.attr("dim")),
         ]
         self.segment(y + 3, x + 1, segs, inner)
 
@@ -1892,6 +2067,7 @@ class App:
             ("DISPLAY & ACTIONS", "accent"),
             ("  v                   Toggle card grid vs compact list layout", "base"),
             ("  l                   Filter: all / live / favorites / top25 / upsets", "base"),
+            ("  o                   Filter by conference (CFB/CBB) or division (pro)", "base"),
             ("  a / h (or ! / @)    Star / unstar away or home team as favorite", "base"),
             ("  c / C               Copy selected game (c) or whole board (C) for Discord", "base"),
             ("  g                   Cycle icon set: nerd / unicode / emoji / ascii", "base"),
@@ -1905,6 +2081,75 @@ class App:
         self.draw_box(top, 2, min(height, len(lines) + 2), box_w, self.attr("dim"), title="sportstui Help")
         for i, (text, kind) in enumerate(lines[:max(1, height - 2)]):
             self.put(top + 1 + i, 3, text[:box_w - 4], self.attr(kind))
+
+    # -- group picker modal (cfbtui conferences.py exact modal) -----------
+    def get_group_options(self):
+        is_college = self.league_key in ("cfb", "cbb")
+        first_label = "All conferences" if is_college else "All divisions / conferences"
+        return [("all", first_label)] + LEAGUE_GROUPS.get(self.league_key, [])
+
+    def draw_group_picker(self, h, w):
+        is_college = self.league_key in ("cfb", "cbb")
+        title = "Conference" if is_college else "Division / Conference"
+        options = self.get_group_options()
+
+        box_w = min(w - 6, 44)
+        box_h = min(h - 4, len(options) + 2)
+        by = max(1, (h - box_h) // 2)
+        bx = max(2, (w - box_w) // 2)
+
+        # Clear background of modal box
+        for row in range(box_h):
+            self.fill_line(by + row, bx, box_w, self.attr("panel"))
+        self.draw_box(by, bx, box_h, box_w, self.attr("focus"), title=title, heavy=True)
+
+        avail = box_h - 2
+        if self.picker_sel < self.picker_scroll:
+            self.picker_scroll = self.picker_sel
+        if self.picker_sel >= self.picker_scroll + avail:
+            self.picker_scroll = self.picker_sel - avail + 1
+
+        for idx in range(self.picker_scroll, min(len(options), self.picker_scroll + avail)):
+            gid, gname = options[idx]
+            ry = by + 1 + (idx - self.picker_scroll)
+            sel = (idx == self.picker_sel)
+            is_cur = (self.group_filter == gid) or (not self.group_filter and gid == "all")
+            cursor = "▸ " if sel else ("• " if is_cur else "  ")
+            txt = cursor + gname
+            attr = self.attr("focus") if sel else (self.attr("accent") if is_cur else self.attr("base"))
+            self.put(ry, bx + 2, txt[:box_w - 4], attr)
+
+    def open_group_picker(self):
+        options = self.get_group_options()
+        self.view = "group_picker"
+        cur = self.group_filter or "all"
+        for i, (gid, _) in enumerate(options):
+            if gid == cur:
+                self.picker_sel = i
+                break
+        else:
+            self.picker_sel = 0
+        self.picker_scroll = max(0, self.picker_sel - 5)
+        self.scr.clear()
+
+    def handle_group_picker(self, ch):
+        options = self.get_group_options()
+        if ch in (curses.KEY_UP, ord("k")):
+            self.picker_sel = max(0, self.picker_sel - 1)
+        elif ch in (curses.KEY_DOWN, ord("j")):
+            self.picker_sel = min(len(options) - 1, self.picker_sel + 1)
+        elif ch in (curses.KEY_ENTER, 10, 13):
+            gid, name = options[self.picker_sel]
+            self.group_filter = None if gid == "all" else gid
+            self.group_name = None if gid == "all" else name
+            self.view = "board"
+            self.scroll = 0
+            self.scr.clear()
+            self.say("Showing: %s" % (name if gid != "all" else "all"))
+        elif ch in (27, ord("q"), ord("o")):
+            self.view = "board"
+            self.scr.clear()
+        return True
 
     # -- Discord copy ------------------------------------------------------
     def copy_game_discord(self, game):
@@ -1946,7 +2191,7 @@ class App:
             if self.view == "news" and self.news_story:
                 self.news_story = None
                 self.news_scroll = 0
-            elif self.view in ("extra", "detail", "news", "help"):
+            elif self.view in ("extra", "detail", "news", "help", "group_picker"):
                 self.view = "board"
                 self.scroll = 0
             self.scr.clear()
@@ -1969,6 +2214,8 @@ class App:
         if self.view == "help":
             self.view = "board"
             return True
+        if self.view == "group_picker":
+            return self.handle_group_picker(ch)
         if self.view == "board":
             return self.handle_board(ch)
         if self.view == "extra":
@@ -2050,6 +2297,8 @@ class App:
             self.scroll = 0
             self.scr.clear()
             self.say("filter: %s" % self.filter)
+        elif ch == ord("o"):
+            self.open_group_picker()
         elif ch == ord("R"):
             if not self.lg()["poll"]:
                 self.say("%s has no poll — showing standings" % self.lg()["name"])
@@ -2168,6 +2417,8 @@ class App:
             return
         self.league_key = key
         self.week = None
+        self.group_filter = None
+        self.group_name = None
         self.sel_id = None
         self.scroll = 0
         self.extra_tab = self.extra_group = self.extra_sel = self.extra_scroll = 0
@@ -2275,13 +2526,12 @@ ALIASES = {
 }
 
 
-def main(argv=None):
-    prog = os.path.basename(sys.argv[0]) if argv is None else "sportstui"
+def build_parser(prog="sportstui"):
     only = ALIASES.get(prog)
     parser = argparse.ArgumentParser(
         prog=prog,
         description=("A terminal scoreboard for %s." % BY_KEY[only]["name"])
-        if only else "A terminal scoreboard for CFB, CBB, NHL, NBA, MLB and NFL.",
+        if only else "A terminal scoreboard for CFB, NFL, NHL, NBA, CBB and MLB.",
     )
     parser.add_argument("--league", choices=list(BY_KEY),
                         help="start on this league (combined board only)")
@@ -2291,12 +2541,23 @@ def main(argv=None):
     parser.add_argument("--glyphs", choices=list(GLYPHS))
     parser.add_argument("--plain", action="store_true", help="print the board and exit")
     parser.add_argument("--version", action="version", version="%s %s" % (prog, VERSION))
+    return parser
+
+
+def parse_args(argv=None, prog="sportstui"):
+    parser = build_parser(prog)
     args = parser.parse_args(argv)
-    args.only = only
+    args.only = ALIASES.get(prog)
+    return args
+
+
+def main(argv=None):
+    prog = os.path.basename(sys.argv[0]) if argv is None else "sportstui"
+    args = parse_args(argv, prog=prog)
     if args.only and args.league and args.league != args.only:
-        parser.error("%s only shows %s" % (prog, args.only.upper()))
+        sys.exit("%s only shows %s" % (prog, args.only.upper()))
     if args.week and args.only and args.only not in ("cfb", "nfl"):
-        parser.error("--week only applies to CFB and NFL")
+        sys.exit("--week only applies to CFB and NFL")
     if args.plain:
         return plain(args)
     if os.environ.get("TERM") in (None, "", "dumb"):

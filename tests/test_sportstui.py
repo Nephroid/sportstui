@@ -17,6 +17,54 @@ sportstui = loader.load_module()
 
 
 class TestSportstui(unittest.TestCase):
+    def test_league_groups_and_filtering(self):
+        # All 6 leagues have configured group/conference pickers
+        for lg in ("cfb", "nfl", "nhl", "nba", "cbb", "mlb"):
+            self.assertIn(lg, sportstui.LEAGUE_GROUPS)
+            self.assertGreater(len(sportstui.LEAGUE_GROUPS[lg]), 0)
+
+        # Pro leagues have team mappings
+        for lg in ("nfl", "nhl", "nba", "mlb"):
+            self.assertIn(lg, sportstui.PRO_TEAM_GROUPS)
+            self.assertIn("DET", sportstui.PRO_TEAM_GROUPS[lg])
+
+        # Test scoreboard URL includes master groups for CFB and CBB
+        cfb_url = sportstui.scoreboard_url(sportstui.BY_KEY["cfb"], dt.date(2026, 10, 31))
+        self.assertIn("groups=80", cfb_url)
+        cbb_url = sportstui.scoreboard_url(sportstui.BY_KEY["cbb"], dt.date(2026, 10, 31))
+        self.assertIn("groups=50", cbb_url)
+
+        # Test App group filtering in memory
+        opts = sportstui.parse_args([])
+        app = sportstui.App(None, opts)
+        app.league_key = "cfb"
+        group_opts = app.get_group_options()
+        self.assertEqual(group_opts[0], ("all", "All conferences"))
+        self.assertEqual(group_opts[1], ("5", "Big Ten"))
+
+        games = [
+            {"id": "1", "state": "post", "start": None, "away": {"abbr": "MSU", "conf_id": "5", "rank": None}, "home": {"abbr": "MICH", "conf_id": "5", "rank": None}},
+            {"id": "2", "state": "post", "start": None, "away": {"abbr": "BAMA", "conf_id": "8", "rank": None}, "home": {"abbr": "LSU", "conf_id": "8", "rank": None}},
+        ]
+        app.group_filter = "5"
+        filtered = app.visible(games)
+        self.assertEqual(len(filtered), 1)
+        self.assertEqual(filtered[0]["id"], "1")
+
+        # Test NFL pro division filtering
+        nfl_app = sportstui.App(None, opts)
+        nfl_app.league_key = "nfl"
+        nfl_opts = nfl_app.get_group_options()
+        self.assertEqual(nfl_opts[0], ("all", "All divisions / conferences"))
+        nfl_games = [
+            {"id": "10", "state": "post", "start": None, "away": {"abbr": "DET", "rank": None}, "home": {"abbr": "GB", "rank": None}},
+            {"id": "20", "state": "post", "start": None, "away": {"abbr": "KC", "rank": None}, "home": {"abbr": "DEN", "rank": None}},
+        ]
+        nfl_app.group_filter = "nfc_north"
+        nfl_filtered = nfl_app.visible(nfl_games)
+        self.assertEqual(len(nfl_filtered), 1)
+        self.assertEqual(nfl_filtered[0]["id"], "10")
+
     def test_league_order(self):
         expected_order = ["cfb", "nfl", "nhl", "nba", "cbb", "mlb"]
         actual_order = [lg["key"] for lg in sportstui.LEAGUES]

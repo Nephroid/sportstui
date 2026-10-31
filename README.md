@@ -41,7 +41,8 @@ You can run `sportstui` as a combined multi-league app or launch directly into a
 | `PageUp` / `PageDown` | Fast scroll game list or detail view |
 | `Enter` | Open game details (team banners, win probability bar & sparkline, linescore by period, team stats, leaders, and scoring plays) |
 | `v` | Toggle card **grid** vs compact **list** view |
-| `l` | Cycle filters: **all** → **live** → **fav** → **upsets** → **top 25** |
+| `l` | Cycle status filters: **all** → **live** → **fav** → **upsets** → **top 25** |
+| `o` | Open **Conference / Division** filter modal (B1G, SEC, ACC, Big 12, NFC/AFC North/South/East/West, etc.) |
 | `R` | Open side-by-side Poll Rankings (AP Top 25 + AFCA Coaches Poll for CFB & CBB) |
 | `T` | Open side-by-side or tabbed Conference / Division Standings tables |
 | `N` | Open League News headlines (`Enter` to read story, `o` to open in browser) |
