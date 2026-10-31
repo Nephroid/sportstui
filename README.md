@@ -48,7 +48,7 @@ You can run `sportstui` as a combined multi-league app or launch directly into a
 | `a` / `!` (or `1` in single-league mode) | Toggle star on **away** team as favorite |
 | `h` / `@` (or `2` in single-league mode) | Toggle star on **home** team as favorite |
 | `c` / `C` | Copy selected game (`c`) or full board (`C`) formatted for Discord |
-| `g` | Cycle glyph styles: **nerd** → **unicode** → **ascii** |
+| `g` | Cycle glyph styles: **nerd** → **unicode** → **emoji** → **ascii** |
 | `r` | Force refresh data immediately |
 | `Esc` | Return to scoreboard from detail / rankings / standings / news / help |
 | `?` | Toggle help overlay |

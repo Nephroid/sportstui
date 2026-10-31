@@ -92,6 +92,21 @@ GLYPHS = {
         "star": "★", "dot": "  ·  ", "at": "@", "rank": "#",
         "bar_full": "█", "bar_empty": "░", "spark": "▁▂▃▄▅▆▇█",
     },
+    "emoji": {
+        "tl": "╭", "tr": "╮", "bl": "╰", "br": "╯",
+        "tl_round": "╭", "tr_round": "╮", "bl_round": "╰", "br_round": "╯",
+        "tl_heavy": "┏", "tr_heavy": "┓", "bl_heavy": "┗", "br_heavy": "┛",
+        "h": "─", "v": "│", "h_heavy": "━", "v_heavy": "┃",
+        "live": "🔴", "final": "🏁", "pregame": "🕒", "halftime": "⏸",
+        "kickoff": "🚀", "period": "⏭",
+        "td": "🏈", "fg": "🎯", "score": "🔔",
+        "red_zone": "🔥", "poss": "👉",
+        "timeout": "🟢", "timeout_used": "⚪",
+        "upset": "⚡", "upset_watch": "👀",
+        "fresh": "✅", "stale": "⏳", "error": "❌", "loading": "🔃", "refresh": "🔄",
+        "star": "⭐", "dot": "  ·  ", "at": "@", "rank": "#",
+        "bar_full": "🟩", "bar_empty": "⬜", "spark": "▁▂▃▄▅▆▇█",
+    },
     "ascii": {
         "tl": "+", "tr": "+", "bl": "+", "br": "+",
         "tl_round": "+", "tr_round": "+", "bl_round": "+", "br_round": "+",
@@ -1879,7 +1894,7 @@ class App:
             ("  l                   Filter: all / live / favorites / top25 / upsets", "base"),
             ("  a / h (or ! / @)    Star / unstar away or home team as favorite", "base"),
             ("  c / C               Copy selected game (c) or whole board (C) for Discord", "base"),
-            ("  g                   Cycle icon set: nerd / unicode / ascii", "base"),
+            ("  g                   Cycle icon set: nerd / unicode / emoji / ascii", "base"),
             ("  r                   Force refresh immediately", "base"),
             ("  Esc                 Back to scoreboard", "base"),
             ("  q                   Quit", "base"),
@@ -1945,7 +1960,7 @@ class App:
             self.say("Refreshing...")
             return True
         if ch == ord("g"):
-            order = ["nerd", "unicode", "ascii"]
+            order = ["nerd", "unicode", "emoji", "ascii"]
             self.glyphs = order[(order.index(self.glyphs) + 1) % len(order)] if self.glyphs in order else "unicode"
             self.save_config()
             self.say("glyphs: %s" % self.glyphs)

@@ -17,6 +17,19 @@ sportstui = loader.load_module()
 
 
 class TestSportstui(unittest.TestCase):
+    def test_glyph_sets(self):
+        for name in ("nerd", "unicode", "emoji", "ascii"):
+            self.assertIn(name, sportstui.GLYPHS)
+            g = sportstui.GLYPHS[name]
+            for key in ("live", "final", "pregame", "star", "upset", "red_zone", "fresh"):
+                self.assertIn(key, g)
+        # Check emoji specific values
+        em = sportstui.GLYPHS["emoji"]
+        self.assertEqual(em["live"], "🔴")
+        self.assertEqual(em["final"], "🏁")
+        self.assertEqual(em["star"], "⭐")
+        self.assertEqual(em["red_zone"], "🔥")
+
     def test_aliases(self):
         self.assertEqual(sportstui.ALIASES.get("cfbtui"), "cfb")
         self.assertEqual(sportstui.ALIASES.get("cbbtui"), "cbb")
