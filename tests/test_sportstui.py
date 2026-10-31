@@ -792,6 +792,42 @@ class TestSportstui(unittest.TestCase):
         self.assertEqual(sportstui.str_width(home_row), 40)
         self.assertTrue(home_row.endswith("○○○  13"), f"Expected row to end with '○○○  13', got {home_row!r}")
 
+    def test_possession_arrow_glyphs_and_fallback(self):
+        """Test possession arrow glyphs across sets and fallback parsing."""
+        self.assertEqual(sportstui.GLYPHS["nerd"]["poss"], "\uf0da")
+        self.assertEqual(sportstui.GLYPHS["unicode"]["poss"], "▶")
+        self.assertEqual(sportstui.GLYPHS["emoji"]["poss"], "👉")
+        self.assertEqual(sportstui.GLYPHS["ascii"]["poss"], ">")
+
+        # Situation fallback when possession is None but active down has lastPlay team
+        raw_sit = {
+            "down": 1,
+            "distance": 10,
+            "possession": None,
+            "lastPlay": {"team": {"id": "275"}},
+        }
+        sit = sportstui.parse_situation(raw_sit)
+        self.assertEqual(sit["possession"], "275")
+
+        # Test possession arrow placement in card team cell text
+        for g_name, exp_arrow in [("unicode", "▶"), ("nerd", "\uf0da"), ("emoji", "👉"), ("ascii", ">")]:
+            opts = sportstui.parse_args(["--glyphs", g_name])
+            app = sportstui.App(None, opts)
+            game = {
+                "id": "1",
+                "league": "cfb",
+                "state": "in",
+                "situation": {"possession": "103"},
+                "away": {"id": "103", "abbr": "BC", "record": "4-3", "rank": None, "score": "7", "score_int": 7, "color": "8B0000"},
+                "home": {"id": "150", "abbr": "DUKE", "record": "5-2", "rank": None, "score": "0", "score_int": 0, "color": "00539B"},
+            }
+            bc_row = app._team_cell_text(game, game["away"], True, 40)
+            duke_row = app._team_cell_text(game, game["home"], False, 40)
+            self.assertEqual(sportstui.str_width(bc_row), 40)
+            self.assertEqual(sportstui.str_width(duke_row), 40)
+            self.assertIn(exp_arrow, bc_row)
+            self.assertNotIn(exp_arrow, duke_row)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -208,7 +208,7 @@ GLYPHS = {
         "live": "", "final": "", "pregame": "", "halftime": "",
         "kickoff": "", "period": "",
         "td": "", "fg": "◎", "score": "",
-        "red_zone": "", "poss": "",
+        "red_zone": "", "poss": "\uf0da",
         "timeout": "", "timeout_used": "",
         "upset": "", "upset_watch": "",
         "fresh": "", "stale": "", "error": "", "loading": "", "refresh": "",
@@ -414,12 +414,15 @@ def spread_text(odds):
 def parse_situation(raw):
     if not isinstance(raw, dict):
         return None
+    poss = raw.get("possession")
+    if not poss and raw.get("down"):
+        poss = dig(raw, "lastPlay", "team", "id") or dig(raw, "lastPlay", "end", "team", "id")
     return {
         "down": raw.get("down"),
         "distance": raw.get("distance"),
         "yard_line": raw.get("yardLine"),
         "red_zone": raw.get("isRedZone") is True,
-        "possession": str(raw.get("possession") or "") or None,
+        "possession": str(poss or "") or None,
         "home_timeouts": raw.get("homeTimeouts"),
         "away_timeouts": raw.get("awayTimeouts"),
         "down_dist": (raw.get("downDistanceText") or "").strip(),
@@ -984,52 +987,51 @@ def clip_to_width(s, max_w):
 
 
 def team_row_prefix(lead, star, rank_num):
-    """Build the exact 8-visual-column team row prefix (7 cols prefix + 1 space before abbr).
-
-    Visual layout (7 columns of prefix + 1 space before abbreviation):
-      - Lead indicator (possession glyph) and star (favorite glyph) cluster on the left.
-      - Rank number (e.g. '#12') right-aligned on the right of the 7-column prefix.
-      - Trailing space before the team abbreviation.
+    """Build the exact 8-visual-column team row prefix matching cfbtui:
+    Layout: ' {lead}{star}{rank:>4} '
+      - Column 0: ' ' (leading space)
+      - Column 1: lead (possession arrow or ' ')
+      - Column 2: star (favorite star or ' ')
+      - Column 3..6: rank (e.g. ' #19', '  #5', or '    ')
+      - Column 7: ' ' (trailing space before team abbreviation)
+    Team abbreviation starts at visual column 8 (0-indexed column 8).
     Total visual display width is guaranteed to be exactly 8 columns.
     """
     lead_s = lead.strip() if lead else ""
     star_s = star.strip() if star else ""
     rk_s = f"#{rank_num}" if rank_num else ""
-    target_prefix_w = 7
-    rk_w = str_width(rk_s)
-    avail = max(0, target_prefix_w - rk_w)
+    target_prefix_w = 8
 
+    lead_w = str_width(lead_s)
+    star_w = str_width(star_s)
+    rk_w = str_width(rk_s)
+
+    # 1. Standard 1-col glyphs (nerd, unicode, ascii): exact cfbtui formula
+    if lead_w <= 1 and star_w <= 1:
+        lead_part = lead_s if lead_s else " "
+        star_part = star_s if star_s else " "
+        return f" {lead_part}{star_part}{rk_s:>4} "
+
+    # 2. Multi-width emoji mode (e.g. 👉, ⭐):
+    # Ensure visual width before abbreviation is exactly 8 columns
     icons = ""
     if lead_s and star_s:
-        cand = lead_s + star_s
-        if str_width(cand) <= avail:
-            icons = cand
-        elif str_width(star_s) <= avail:
-            icons = star_s
-        elif str_width(lead_s) <= avail:
-            icons = lead_s
+        icons = lead_s + star_s
     elif lead_s:
-        if str_width(lead_s) + 1 <= avail:
-            icons = " " + lead_s
-        elif str_width(lead_s) <= avail:
-            icons = lead_s
+        icons = lead_s
     elif star_s:
-        if str_width(star_s) + 2 <= avail:
-            icons = "  " + star_s
-        elif str_width(star_s) + 1 <= avail:
-            icons = " " + star_s
-        elif str_width(star_s) <= avail:
-            icons = star_s
+        icons = star_s
 
-    cur_w = str_width(icons) + rk_w
-    pad = max(0, target_prefix_w - cur_w)
-    prefix_7 = icons + (" " * pad) + rk_s
-    if str_width(prefix_7) > target_prefix_w:
-        prefix_7 = clip_to_width(prefix_7, target_prefix_w)
-        rem = target_prefix_w - str_width(prefix_7)
-        if rem > 0:
-            prefix_7 += " " * rem
-    return prefix_7 + " "
+    lead_sp = " " if (1 + str_width(icons) + rk_w + 1 <= target_prefix_w) else ""
+    cur_w = str_width(lead_sp) + str_width(icons) + rk_w + 1
+    pad_w = max(0, target_prefix_w - cur_w)
+    prefix = lead_sp + icons + (" " * pad_w) + rk_s + " "
+    if str_width(prefix) > target_prefix_w:
+        prefix = clip_to_width(prefix, target_prefix_w)
+    rem = target_prefix_w - str_width(prefix)
+    if rem > 0:
+        prefix += " " * rem
+    return prefix
 
 
 def timeouts_str(glyphs, remaining, league="cfb"):
