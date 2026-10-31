@@ -28,6 +28,7 @@ import subprocess
 import sys
 import threading
 import time
+import unicodedata
 import urllib.error
 import urllib.request
 import webbrowser
@@ -902,6 +903,105 @@ def readable_fg_xterm(value):
 
 
 # --------------------------------------------------------------------------
+# terminal display width utilities
+# --------------------------------------------------------------------------
+
+try:
+    import wcwidth
+    _wcwidth_func = wcwidth.wcwidth
+except ImportError:
+    _wcwidth_func = None
+
+
+def char_width(c):
+    """Visual display width of a single character in terminal columns."""
+    if not c:
+        return 0
+    if _wcwidth_func is not None:
+        w = _wcwidth_func(c)
+        if w >= 0:
+            return w
+    if ord(c) < 32 or 0x7F <= ord(c) < 0xA0:
+        return 0
+    if unicodedata.combining(c):
+        return 0
+    if unicodedata.east_asian_width(c) in ("W", "F"):
+        return 2
+    return 1
+
+
+def str_width(s):
+    """Visual display width of a string in terminal columns."""
+    if not s:
+        return 0
+    return sum(char_width(c) for c in s)
+
+
+def clip_to_width(s, max_w):
+    """Clip a string so its visual display width does not exceed max_w."""
+    if not s or max_w <= 0:
+        return ""
+    cur_w = 0
+    out = []
+    for c in s:
+        w = char_width(c)
+        if cur_w + w > max_w:
+            break
+        out.append(c)
+        cur_w += w
+    return "".join(out)
+
+
+def team_row_prefix(lead, star, rank_num):
+    """Build the exact 8-visual-column team row prefix (7 cols prefix + 1 space before abbr).
+
+    Visual layout (7 columns of prefix + 1 space before abbreviation):
+      - Lead indicator (possession glyph) and star (favorite glyph) cluster on the left.
+      - Rank number (e.g. '#12') right-aligned on the right of the 7-column prefix.
+      - Trailing space before the team abbreviation.
+    Total visual display width is guaranteed to be exactly 8 columns.
+    """
+    lead_s = lead.strip() if lead else ""
+    star_s = star.strip() if star else ""
+    rk_s = f"#{rank_num}" if rank_num else ""
+    target_prefix_w = 7
+    rk_w = str_width(rk_s)
+    avail = max(0, target_prefix_w - rk_w)
+
+    icons = ""
+    if lead_s and star_s:
+        cand = lead_s + star_s
+        if str_width(cand) <= avail:
+            icons = cand
+        elif str_width(star_s) <= avail:
+            icons = star_s
+        elif str_width(lead_s) <= avail:
+            icons = lead_s
+    elif lead_s:
+        if str_width(lead_s) + 1 <= avail:
+            icons = " " + lead_s
+        elif str_width(lead_s) <= avail:
+            icons = lead_s
+    elif star_s:
+        if str_width(star_s) + 2 <= avail:
+            icons = "  " + star_s
+        elif str_width(star_s) + 1 <= avail:
+            icons = " " + star_s
+        elif str_width(star_s) <= avail:
+            icons = star_s
+
+    cur_w = str_width(icons) + rk_w
+    pad = max(0, target_prefix_w - cur_w)
+    prefix_7 = icons + (" " * pad) + rk_s
+    if str_width(prefix_7) > target_prefix_w:
+        prefix_7 = clip_to_width(prefix_7, target_prefix_w)
+        rem = target_prefix_w - str_width(prefix_7)
+        if rem > 0:
+            prefix_7 += " " * rem
+    return prefix_7 + " "
+
+
+# --------------------------------------------------------------------------
 # application
 # --------------------------------------------------------------------------
 
@@ -981,7 +1081,12 @@ class App:
             self.colours = False
             self.pairs = {}
             return
-        self.colours = curses.has_colors()
+        try:
+            self.colours = curses.has_colors()
+        except curses.error:
+            self.colours = False
+            self.pairs = {}
+            return
         self.pairs = {}
         self.next_pair = 20
         if not self.colours:
@@ -1204,7 +1309,7 @@ class App:
         limit = w - x if width is None else min(width, w - x)
         if limit <= 0:
             return
-        text = text[:limit]
+        text = clip_to_width(text, limit)
         if reverse:
             attr |= curses.A_REVERSE
         try:
@@ -1216,10 +1321,11 @@ class App:
         for text, attr in segs:
             if width <= 0:
                 break
-            text = text[:width]
+            text = clip_to_width(text, width)
             self.put(y, x, text, attr, reverse=reverse)
-            x += len(text)
-            width -= len(text)
+            tw = str_width(text)
+            x += tw
+            width -= tw
 
     def fill_line(self, y, x, width, attr):
         self.put(y, x, " " * max(0, width), attr, width=width)
@@ -1246,8 +1352,10 @@ class App:
         vt = g["v_heavy"] if heavy else g["v"]
         inner = max(0, width - 2)
         if title:
-            t_str = " %s " % title[:max(0, inner - 4)]
-            top_bar = tl + hz + t_str + hz * max(0, inner - 1 - len(t_str)) + tr
+            title_clipped = clip_to_width(title, max(0, inner - 4))
+            t_str = " %s " % title_clipped
+            rem_hz = max(0, inner - 1 - str_width(t_str))
+            top_bar = tl + hz + t_str + hz * rem_hz + tr
         else:
             top_bar = tl + hz * inner + tr
         self.put(y, x, top_bar, border_attr, width=width)
@@ -1310,9 +1418,10 @@ class App:
         game_week = (games[0].get("week") if games else None) or self.week
         wk_str = ("Week %d · " % game_week) if (game_week and self.league_key in ("cfb", "nfl")) else ""
         right = "%s%s " % (wk_str, self.date.strftime("%a %b %-d"))
-        used = sum(len(s) for s, _ in segs)
-        if w - used - len(right) > 0:
-            segs.append((" " * (w - used - len(right)), self.attr("panel")))
+        used = sum(str_width(s) for s, _ in segs)
+        right_w = str_width(right)
+        if w - used - right_w > 0:
+            segs.append((" " * (w - used - right_w), self.attr("panel")))
             segs.append((right, self.attr("panel")))
         self.segment(0, 0, segs, w)
 
@@ -1411,9 +1520,10 @@ class App:
             segs.append((k, self.attr("key")))
             segs.append((" %s  " % lbl, self.attr("key_label")))
         right = "│ [ ] day  t today "
-        used = sum(len(s) for s, _ in segs)
-        if w - used - len(right) > 0:
-            segs.append((" " * (w - used - len(right)), self.attr("panel")))
+        used = sum(str_width(s) for s, _ in segs)
+        right_w = str_width(right)
+        if w - used - right_w > 0:
+            segs.append((" " * (w - used - right_w), self.attr("panel")))
             segs.append((right, self.attr("panel")))
         self.segment(y, 0, segs, w)
 
@@ -1543,31 +1653,32 @@ class App:
         sit = game.get("situation") if live else None
         poss = g["poss"] if (sit and sit.get("possession") == side["id"] and side["id"]) else ""
         fav = self.is_fav(side)
-        if poss:
-            icon = "%s " % poss
-        elif fav:
-            icon = "%s " % g["star"]
-        else:
-            icon = ""
+        star = g["star"] if fav else ""
+        rank_num = side.get("rank")
 
-        rk_str = ("#%d" % side["rank"]) if side["rank"] else ""
-
-        # In card mode (cell_w >= 36), exact 19-char aligned block matching cfbtui:
-        # Every team abbr starts at column 7, every record starts at column 13
+        # In card mode (cell_w >= 36), exact aligned block matching cfbtui:
+        # Every team abbr starts at exact visual column 8
         if cell_w >= 36:
-            if fav or poss:
-                tag = "  %s%s" % (icon, rk_str.ljust(3))
-            else:
-                tag = "   %s" % ((rk_str + " ").ljust(4) if rk_str else "    ")
-            left = "%s%-5s %-6s" % (tag, side["abbr"][:5], side["record"][:6])
-            score_str = str(side["score"]) if game["state"] != "pre" else ""
-            score_fmt = ("%2s" % score_str) if score_str else ""
-            pad = max(1, cell_w - len(left) - len(score_fmt))
-            return left + (" " * pad) + score_fmt
+            prefix = team_row_prefix(poss, star, rank_num)
+            abbr = side["abbr"][:5]
+            rec = f" {side['record'][:6]}" if side.get("record") else ""
+            left = prefix + f"{abbr:<5}{rec}"
+            score = side.get("score") if game["state"] != "pre" else None
+            sc_fmt = f"{score:>3} " if score is not None else "    "
+            pad = max(1, cell_w - str_width(left) - str_width(sc_fmt))
+            return left + (" " * pad) + sc_fmt
+
         # In compact list mode (cell_w around 21)
-        left = "%s%s%-5s %-6s" % (icon if fav or poss else "", (rk_str + " ") if rk_str else "", side["abbr"][:5], side["record"][:6])
-        score_str = str(side["score"]) if game["state"] != "pre" else ""
-        pad = max(1, cell_w - len(left) - len(score_str))
+        icon = f"{poss} " if poss else (f"{star} " if star else "")
+        rk_str = f"#{rank_num}" if rank_num else ""
+        left = "%s%s%-5s %-6s" % (
+            icon if (fav or poss) else "",
+            (rk_str + " ") if rk_str else "",
+            side["abbr"][:5],
+            (side.get("record") or "")[:6],
+        )
+        score_str = str(side["score"]) if game["state"] != "pre" and side.get("score") is not None else ""
+        pad = max(1, cell_w - str_width(left) - str_width(score_str))
         return left + (" " * pad) + score_str
 
     def draw_list_row(self, game, y, width, selected):
@@ -1709,7 +1820,13 @@ class App:
         # Status row (row 3 inside card)
         status = self.status_text(game)
         extra = self.extra_text(game)
-        pad = max(1, inner - len(status) - len(extra) - 1)
+        st_w = str_width(status)
+        ex_w = str_width(extra)
+        avail_for_extra = inner - (1 + st_w) - 1
+        if ex_w > avail_for_extra:
+            extra = clip_to_width(extra, max(0, avail_for_extra))
+            ex_w = str_width(extra)
+        pad = max(1, inner - (1 + st_w) - ex_w)
         st_attr = self.attr("live") if live else (self.attr("focus") if selected else self.attr("base"))
         self.fill_line(y + 3, x + 1, inner, self.attr("base"))
         segs = [

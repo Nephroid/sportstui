@@ -372,6 +372,298 @@ class TestSportstui(unittest.TestCase):
         self.assertEqual(det["linescores"]["away"], ["7", "7", "3", "7"])
         self.assertEqual(det["wp_series"], [0.45, 0.20])
 
+    def test_width_utilities(self):
+        # ASCII characters return width 1
+        for ch in ("A", "z", "0", "9", " ", "#", "-", "&"):
+            self.assertEqual(sportstui.char_width(ch), 1)
+            self.assertEqual(sportstui.str_width(ch), 1)
+        self.assertEqual(sportstui.str_width("Hello World"), 11)
+
+        # Single-width unicode characters return width 1
+        for ch in ("▸", "★", "·", "│", "─", "┏", "┓"):
+            self.assertEqual(sportstui.char_width(ch), 1, f"Expected width 1 for single-width unicode {ch}")
+            self.assertEqual(sportstui.str_width(ch), 1)
+
+        # Double-width emojis return width 2
+        for em in ("🔴", "👉", "👀", "⭐", "🔥", "⚡", "✅", "🏈"):
+            self.assertEqual(sportstui.char_width(em), 2, f"Expected width 2 for {em}")
+            self.assertEqual(sportstui.str_width(em), 2, f"Expected width 2 for {em}")
+        self.assertEqual(sportstui.str_width("🔴 Q1 10:00"), 11)
+        self.assertEqual(sportstui.str_width("🔴 Q1 13:42"), 11)
+        self.assertEqual(sportstui.str_width("👀 UPSET WATCH"), 14)
+
+        # Combining characters
+        combining = "\u0300"  # grave accent
+        self.assertEqual(sportstui.char_width(combining), 0)
+
+        # clip_to_width
+        self.assertEqual(sportstui.clip_to_width("abc", 2), "ab")
+        self.assertEqual(sportstui.clip_to_width("🔴abc", 2), "🔴")
+        self.assertEqual(sportstui.clip_to_width("🔴abc", 3), "🔴a")
+        # Should not cut double-width character in half
+        self.assertEqual(sportstui.clip_to_width("a🔴", 2), "a")
+        self.assertEqual(sportstui.clip_to_width("a🔴", 3), "a🔴")
+        self.assertEqual(sportstui.clip_to_width("🔴 Q1 10:00", 1), "")
+        self.assertEqual(sportstui.clip_to_width("🔴 Q1 10:00", 2), "🔴")
+        self.assertEqual(sportstui.clip_to_width("🔴 Q1 10:00", 12), "🔴 Q1 10:00")
+
+    def test_team_row_prefix_visual_width(self):
+        cases = [
+            ("", "", None),
+            ("", "", 12),
+            ("", "", 3),
+            ("👉", "", None),
+            ("👉", "", 12),
+            ("", "⭐", None),
+            ("", "⭐", 12),
+            ("👉", "⭐", 12),
+            ("▶", "★", 12),
+            ("", "★", 12),
+            (">", "*", 12),
+        ]
+        for lead, star, rank in cases:
+            prefix = sportstui.team_row_prefix(lead, star, rank)
+            w = sportstui.str_width(prefix)
+            self.assertEqual(w, 8, f"Prefix {prefix!r} for ({lead!r}, {star!r}, {rank!r}) has width {w} != 8")
+            self.assertTrue(prefix.endswith(" "), f"Prefix {prefix!r} must end with space before abbreviation")
+
+    def test_team_cell_text_alignment(self):
+        opts = sportstui.parse_args(["--glyphs", "emoji"])
+        app = sportstui.App(None, opts)
+        app.league_key = "cfb"
+        app.favs.add("cfb:MICH")
+
+        # 1. Unranked, no icon (BC)
+        g_bc = {
+            "state": "in",
+            "situation": {},
+            "home": {
+                "id": "103",
+                "abbr": "BC",
+                "record": "4-3",
+                "rank": None,
+                "score": "0",
+                "score_int": 0,
+                "color": "8B0000",
+            },
+        }
+        bc_row = app._team_cell_text(g_bc, g_bc["home"], False, 40)
+        self.assertEqual(sportstui.str_width(bc_row), 40)
+        bc_prefix = bc_row[:bc_row.find("BC")]
+        self.assertEqual(sportstui.str_width(bc_prefix), 8, f"BC prefix width was {sportstui.str_width(bc_prefix)}, expected 8")
+        self.assertEqual(bc_prefix, "        ")
+
+        # 2. Unranked with emoji possession (👉 DUKE)
+        g_duke = {
+            "state": "in",
+            "situation": {"possession": "150"},
+            "home": {
+                "id": "150",
+                "abbr": "DUKE",
+                "record": "5-2",
+                "rank": None,
+                "score": "0",
+                "score_int": 0,
+                "color": "00539B",
+            },
+        }
+        duke_row = app._team_cell_text(g_duke, g_duke["home"], False, 40)
+        self.assertEqual(sportstui.str_width(duke_row), 40)
+        duke_prefix = duke_row[:duke_row.find("DUKE")]
+        self.assertEqual(sportstui.str_width(duke_prefix), 8, f"DUKE prefix width was {sportstui.str_width(duke_prefix)}, expected 8")
+        self.assertTrue(duke_prefix.startswith(" 👉"))
+
+        # 3. Ranked with double-digit rank (#19 SMU)
+        g_smu = {
+            "state": "in",
+            "situation": {},
+            "away": {
+                "id": "2567",
+                "abbr": "SMU",
+                "record": "6-1",
+                "rank": 19,
+                "score": "0",
+                "score_int": 0,
+                "color": "CC0000",
+            },
+        }
+        smu_row = app._team_cell_text(g_smu, g_smu["away"], True, 40)
+        self.assertEqual(sportstui.str_width(smu_row), 40)
+        smu_prefix = smu_row[:smu_row.find("SMU")]
+        self.assertEqual(sportstui.str_width(smu_prefix), 8, f"SMU prefix width was {sportstui.str_width(smu_prefix)}, expected 8")
+        self.assertEqual(smu_prefix, "    #19 ")
+
+        # 4. Ranked with single-digit rank (#6 IU)
+        g_iu = {
+            "state": "in",
+            "situation": {},
+            "home": {
+                "id": "84",
+                "abbr": "IU",
+                "record": "7-0",
+                "rank": 6,
+                "score": "31",
+                "score_int": 31,
+                "color": "990000",
+            },
+        }
+        iu_row = app._team_cell_text(g_iu, g_iu["home"], False, 40)
+        self.assertEqual(sportstui.str_width(iu_row), 40)
+        iu_prefix = iu_row[:iu_row.find("IU")]
+        self.assertEqual(sportstui.str_width(iu_prefix), 8, f"IU prefix width was {sportstui.str_width(iu_prefix)}, expected 8")
+        self.assertEqual(iu_prefix, "     #6 ")
+
+        # 5. Favorite with star (⭐ MICH)
+        g_mich = {
+            "state": "in",
+            "situation": {},
+            "away": {
+                "id": "130",
+                "abbr": "MICH",
+                "record": "5-2",
+                "rank": None,
+                "score": "17",
+                "score_int": 17,
+                "color": "00274C",
+            },
+        }
+        mich_row = app._team_cell_text(g_mich, g_mich["away"], True, 40)
+        self.assertEqual(sportstui.str_width(mich_row), 40)
+        mich_prefix = mich_row[:mich_row.find("MICH")]
+        self.assertEqual(sportstui.str_width(mich_prefix), 8, f"MICH prefix width was {sportstui.str_width(mich_prefix)}, expected 8")
+        self.assertTrue("⭐" in mich_prefix)
+
+    def test_draw_box_title_width(self):
+        opts = sportstui.parse_args(["--glyphs", "emoji"])
+        app = sportstui.App(None, opts)
+
+        # Mock put to inspect top_bar width
+        captured = []
+        def mock_put(y, x, text, attr=0, width=None, reverse=False):
+            captured.append(text)
+
+        app.put = mock_put
+        app.draw_box(0, 0, 5, 42, 0, title="👀 UPSET WATCH")
+
+        top_bar = captured[0]
+        # Top bar must have EXACT visual width 42 (does not push right border)
+        self.assertEqual(sportstui.str_width(top_bar), 42, f"top_bar width: {sportstui.str_width(top_bar)}")
+        self.assertTrue(top_bar.endswith("┓") or top_bar.endswith("╮") or top_bar.endswith("+") or top_bar.endswith("#"))
+
+    def test_draw_card_status_line_clock_intact(self):
+        opts = sportstui.parse_args(["--glyphs", "emoji"])
+        app = sportstui.App(None, opts)
+
+        # Case A: Live 🔴 Q1 10:00 (Card 1)
+        game1 = {
+            "id": "1",
+            "league": "cfb",
+            "state": "in",
+            "period": 1,
+            "clock": "10:00",
+            "short": "Q1 10:00",
+            "detail": "Q1 10:00",
+            "broadcast": "",
+            "odds": {},
+            "away": {
+                "id": "2567",
+                "abbr": "SMU",
+                "name": "Mustangs",
+                "record": "6-1",
+                "rank": 19,
+                "score": "0",
+                "score_int": 0,
+                "color": "CC0000",
+            },
+            "home": {
+                "id": "183",
+                "abbr": "SYR",
+                "name": "Orange",
+                "record": "3-4",
+                "rank": None,
+                "score": "7",
+                "score_int": 7,
+                "color": "D44500",
+            },
+        }
+
+        row3_card1 = []
+        def mock_put_card1(y, x, text, attr=0, width=None, reverse=False):
+            if y == 3:
+                row3_card1.append((x, text))
+
+        app.put = mock_put_card1
+        app.draw_card(game1, 0, 0, 42, False)
+
+        # Check that the clock text contains full "10:00" and never truncates to "10:0"
+        clock_seg1 = [txt for _, txt in row3_card1 if "10:00" in txt]
+        self.assertEqual(len(clock_seg1), 1)
+        self.assertIn("🔴 Q1 10:00", clock_seg1[0])
+        self.assertNotIn("10:0 ", clock_seg1[0])
+
+        # Padding starts at x=13 (x_orig=1 + str_width(' 🔴 Q1 10:00')=12 -> 13)
+        pad_x1 = [x for x, txt in row3_card1 if x > 1 and txt.startswith(" ")][0]
+        self.assertEqual(pad_x1, 13, f"Pad segment x is {pad_x1}, expected 13")
+
+        # Case B: Live 🔴 Q1 13:42 with situation "4th & 4 at DUKE 31" (Card 2)
+        game2 = {
+            "id": "2",
+            "league": "cfb",
+            "state": "in",
+            "period": 1,
+            "clock": "13:42",
+            "short": "Q1 13:42",
+            "detail": "Q1 13:42",
+            "broadcast": "",
+            "odds": {},
+            "situation": {
+                "possession": "150",
+                "down_dist": "4th & 4 at DUKE 31",
+            },
+            "away": {
+                "id": "103",
+                "abbr": "BC",
+                "name": "Eagles",
+                "record": "4-3",
+                "rank": None,
+                "score": "0",
+                "score_int": 0,
+                "color": "8B0000",
+            },
+            "home": {
+                "id": "150",
+                "abbr": "DUKE",
+                "name": "Blue Devils",
+                "record": "5-2",
+                "rank": None,
+                "score": "0",
+                "score_int": 0,
+                "color": "00539B",
+            },
+        }
+
+        row3_card2 = []
+        def mock_put_card2(y, x, text, attr=0, width=None, reverse=False):
+            if y == 3:
+                row3_card2.append((x, text))
+
+        app.put = mock_put_card2
+        app.draw_card(game2, 0, 0, 42, False)
+
+        # Check that the clock text contains full "13:42" and never truncates to "13:4"
+        clock_seg2 = [txt for _, txt in row3_card2 if "13:42" in txt]
+        self.assertEqual(len(clock_seg2), 1)
+        self.assertIn("🔴 Q1 13:42", clock_seg2[0])
+        self.assertNotIn("13:4 ", clock_seg2[0])
+
+        # Padding starts at x=13
+        pad_x2 = [x for x, txt in row3_card2 if x > 1 and txt.startswith(" ")][0]
+        self.assertEqual(pad_x2, 13, f"Pad segment x is {pad_x2}, expected 13")
+
+        # Verify extra text was also printed
+        extra_seg = [txt for _, txt in row3_card2 if "4th & 4 at DUKE 31" in txt]
+        self.assertEqual(len(extra_seg), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
