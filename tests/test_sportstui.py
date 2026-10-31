@@ -664,6 +664,47 @@ class TestSportstui(unittest.TestCase):
         extra_seg = [txt for _, txt in row3_card2 if "4th & 4 at DUKE 31" in txt]
         self.assertEqual(len(extra_seg), 1)
 
+    def test_grid_cols_widescreen_and_half_page(self):
+        """Test column calculation matching cfbtui: 5 cols widescreen, 2 cols half-page on CM34."""
+        opts = sportstui.parse_args([])
+        app = sportstui.App(None, opts)
+
+        # Widescreen on CM34 Flip (Hyprland fullscreen foot ~180-206 cols)
+        self.assertEqual(app.grid_cols(206), 5)
+        self.assertEqual(app.grid_cols(180), 5)
+
+        # Half-page on CM34 Flip (Hyprland 50/50 split ~100-104 cols)
+        self.assertEqual(app.grid_cols(100), 2)
+        self.assertEqual(app.grid_cols(104), 2)
+
+        # Intermediate widths
+        self.assertEqual(app.grid_cols(132), 3)
+        self.assertEqual(app.grid_cols(144), 4)
+        self.assertEqual(app.grid_cols(70), 1)
+        self.assertEqual(app.grid_cols(36), 1)
+
+    def test_card_layout_fits_terminal(self):
+        """Test card layout distributes width evenly with 1-char gutter and fits within terminal."""
+        opts = sportstui.parse_args([])
+        app = sportstui.App(None, opts)
+
+        for w in (72, 80, 100, 104, 132, 144, 180, 206):
+            cols = app.grid_cols(w)
+            layout = app.card_layout(w, cols)
+            self.assertEqual(len(layout), cols)
+            self.assertEqual(layout[0][0], 1)  # Starts at x=1 (1-char left margin)
+
+            for i in range(len(layout)):
+                x_i, w_i = layout[i]
+                self.assertGreaterEqual(w_i, 34, f"Card width {w_i} < 34 at terminal width {w}")
+                if i > 0:
+                    prev_x, prev_w = layout[i - 1]
+                    self.assertEqual(x_i, prev_x + prev_w + 1, f"Gutter mismatch between cols {i-1} and {i} at width {w}")
+
+            last_x, last_w = layout[-1]
+            end_x = last_x + last_w
+            self.assertLessEqual(end_x, w, f"Card layout overflows width {w}: ends at {end_x}")
+
 
 if __name__ == "__main__":
     unittest.main()

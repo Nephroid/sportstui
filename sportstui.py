@@ -1580,8 +1580,19 @@ class App:
 
     # -- board -------------------------------------------------------------
     def grid_cols(self, width):
-        cw = 42
-        return max(1, (width - 1) // (cw + 1))
+        return max(1, width // 36)
+
+    def card_layout(self, width, cols):
+        avail = max(cols * 34, (width - 2) - (cols - 1))
+        base_cw = avail // cols
+        rem = avail % cols
+        layout = []
+        curr_x = 1
+        for i in range(cols):
+            w = base_cw + (1 if i < rem else 0)
+            layout.append((curr_x, w))
+            curr_x += w + 1
+        return layout
 
     def draw_board(self, top, height, width):
         key = self.board_key()
@@ -1656,9 +1667,9 @@ class App:
         star = g["star"] if fav else ""
         rank_num = side.get("rank")
 
-        # In card mode (cell_w >= 36), exact aligned block matching cfbtui:
+        # In card mode (cell_w >= 30), exact aligned block matching cfbtui:
         # Every team abbr starts at exact visual column 8
-        if cell_w >= 36:
+        if cell_w >= 30:
             prefix = team_row_prefix(poss, star, rank_num)
             abbr = side["abbr"][:5]
             rec = f" {side['record'][:6]}" if side.get("record") else ""
@@ -1720,8 +1731,9 @@ class App:
     # -- grid layout (cfbtui grid.png exact style) -------------------------
     def draw_grid(self, rows, top, height, width):
         g = self.g()
-        cw, ch = 42, 5
+        ch = 5
         cols = self.grid_cols(width)
+        layout = self.card_layout(width, cols)
         idx = self.selected_index(rows)
 
         starred = [gm for gm in rows if self.game_fav(gm)]
@@ -1768,7 +1780,7 @@ class App:
                 y += 1
             else:
                 for col_i, (gi, game) in enumerate(payload):
-                    x = 1 + col_i * (cw + 1)
+                    x, cw = layout[col_i]
                     self.draw_card(game, y, x, cw, gi == idx)
                 y += ch
 
