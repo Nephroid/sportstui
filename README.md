@@ -2,7 +2,7 @@
 
 **Six leagues, one scoreboard, zero dependencies.**
 
-`sportstui` is a fast, colorful terminal scoreboard and sports ticker written in pure Python using standard library `curses` and `urllib`. It streams live scores, odds/spreads, rankings, standings, and play-by-play scoring from ESPN's public endpoints for six major sports leagues:
+`sportstui` is a fast, colorful terminal scoreboard and sports ticker written in pure Python using standard library `curses` and `urllib`. It replicates the exact visual design of `WPTK/cfbtui` — full-bleed team color background bars with WCAG luminance contrast, `★ Favorites` / `Other games` sections, `⚡ UPSET` & `⚑ RED ZONE` heavy card borders, a live bottom `─ticker───` panel, side-by-side poll/standings boxes, and rich play-by-play game detail screens — across six major sports leagues:
 
 - **CFB**: College Football (NCAA FBS)
 - **CBB**: Men's College Basketball (NCAA Division I)
@@ -37,18 +37,20 @@ You can run `sportstui` as a combined multi-league app or launch directly into a
 | `[` / `]` | Previous / next day |
 | `w` / `W` | Next / previous week *(CFB and NFL only)* |
 | `t` | Jump to today's games |
-| `Up` / `Down` (`k` / `j`) | Move game selection cursor |
-| `PageUp` / `PageDown` | Fast scroll game list |
-| `Enter` | Open game details (scoring plays, team leaders, win probability) |
+| `←` `↓` `↑` `→` (`j` / `k`) | 2D card navigation in grid view; row navigation in list view |
+| `PageUp` / `PageDown` | Fast scroll game list or detail view |
+| `Enter` | Open game details (team banners, win probability bar & sparkline, linescore by period, team stats, leaders, and scoring plays) |
 | `v` | Toggle card **grid** vs compact **list** view |
-| `l` | Cycle filters: **all** → **live** → **starred favorites** → **top 25** |
-| `R` | Open Poll Rankings (AP Poll / Coaches Poll for CFB & CBB) |
-| `T` | Open Conference / Division Standings tables |
-| `a` | Toggle star on **away** team as favorite |
-| `h` | Toggle star on **home** team as favorite |
+| `l` | Cycle filters: **all** → **live** → **fav** → **upsets** → **top 25** |
+| `R` | Open side-by-side Poll Rankings (AP Top 25 + AFCA Coaches Poll for CFB & CBB) |
+| `T` | Open side-by-side or tabbed Conference / Division Standings tables |
+| `N` | Open League News headlines (`Enter` to read story, `o` to open in browser) |
+| `a` / `!` (or `1` in single-league mode) | Toggle star on **away** team as favorite |
+| `h` / `@` (or `2` in single-league mode) | Toggle star on **home** team as favorite |
+| `c` / `C` | Copy selected game (`c`) or full board (`C`) formatted for Discord |
 | `g` | Cycle glyph styles: **nerd** → **unicode** → **ascii** |
 | `r` | Force refresh data immediately |
-| `Esc` | Return to scoreboard from detail / rankings / standings / help |
+| `Esc` | Return to scoreboard from detail / rankings / standings / news / help |
 | `?` | Toggle help overlay |
 | `q` | Quit |
 
