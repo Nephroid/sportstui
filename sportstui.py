@@ -16,6 +16,7 @@ the visual design of WPTK/cfbtui:
 """
 
 import argparse
+import concurrent.futures
 import curses
 import datetime as dt
 import html
@@ -43,7 +44,17 @@ CONFIG_PATH = os.path.expanduser(
     os.environ.get("SPORTSTUI_CONFIG", "~/.config/sportstui/config.json")
 )
 
-LEAGUES = [
+ALL_LEAGUE = {
+    "key": "all",
+    "name": "ALL",
+    "label": "ALL",
+    "path": "",
+    "poll": False,
+    "period_prefix": "",
+    "reg_periods": 4,
+}
+
+SPORT_LEAGUES = [
     {"key": "cfb", "name": "CFB", "label": "FBS", "path": "football/college-football", "poll": True, "period_prefix": "Q", "reg_periods": 4},
     {"key": "nfl", "name": "NFL", "label": "NFL", "path": "football/nfl", "poll": False, "period_prefix": "Q", "reg_periods": 4},
     {"key": "nhl", "name": "NHL", "label": "NHL", "path": "hockey/nhl", "poll": False, "period_prefix": "P", "reg_periods": 3},
@@ -51,6 +62,8 @@ LEAGUES = [
     {"key": "cbb", "name": "CBB", "label": "NCAAM", "path": "basketball/mens-college-basketball", "poll": True, "period_prefix": "H", "reg_periods": 2},
     {"key": "mlb", "name": "MLB", "label": "MLB", "path": "baseball/mlb", "poll": False, "period_prefix": "", "reg_periods": 9},
 ]
+
+LEAGUES = [ALL_LEAGUE] + SPORT_LEAGUES
 BY_KEY = {lg["key"]: lg for lg in LEAGUES}
 
 DEFAULT_FAVORITES = [
@@ -495,6 +508,24 @@ def parse_board(lg, date, week=None):
                 g["week"] = board_week
             games.append(g)
     return games
+
+
+def parse_all_boards(date):
+    """Fetch and aggregate scoreboard games from all sports concurrently."""
+    all_games = []
+
+    def _fetch(lg):
+        try:
+            return parse_board(lg, date)
+        except Exception:
+            return []
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(SPORT_LEAGUES)) as ex:
+        for g_list in ex.map(_fetch, SPORT_LEAGUES):
+            if g_list:
+                all_games.extend(g_list)
+
+    return all_games
 
 
 def parse_rankings(lg):
@@ -1256,18 +1287,21 @@ class App:
                 return sit["down_dist"]
         return ""
 
-    def is_fav(self, side):
-        return "%s:%s" % (self.league_key, side["abbr"]) in self.favs
+    def is_fav(self, side, game=None):
+        lg = (game.get("league") if game else None) or self.league_key
+        if lg != "all":
+            return "%s:%s" % (lg, side["abbr"]) in self.favs
+        return any(f.endswith(":" + side["abbr"]) for f in self.favs)
 
     def game_fav(self, game):
-        return self.is_fav(game["away"]) or self.is_fav(game["home"])
+        return self.is_fav(game["away"], game) or self.is_fav(game["home"], game)
 
     def visible(self, games):
         rows = list(games or [])
         if self.group_filter and self.group_filter != "all":
             if self.league_key in ("cfb", "cbb"):
                 rows = [g for g in rows if g["away"].get("conf_id") == self.group_filter or g["home"].get("conf_id") == self.group_filter]
-            else:
+            elif self.league_key != "all":
                 mapping = PRO_TEAM_GROUPS.get(self.league_key, {})
                 rows = [
                     g for g in rows
@@ -1409,7 +1443,8 @@ class App:
     def draw_league_tabs(self, w):
         self.clear_line(0, self.attr("panel"))
         segs = []
-        for i, lg in enumerate(LEAGUES):
+        visible_tabs = [self.lg()] if self.only else LEAGUES
+        for i, lg in enumerate(visible_tabs):
             active = lg["key"] == self.league_key
             label = " %d %s " % (i + 1, lg["name"])
             segs.append((label, self.attr("bar") if active else self.attr("panel")))
@@ -1455,7 +1490,9 @@ class App:
                 next_str = "next %s" % format_age(rem)
 
         game_week = (games[0].get("week") if games else None) or self.week
-        if game_week and self.league_key in ("cfb", "nfl"):
+        if self.league_key == "all":
+            context = "ALL %s" % self.date.strftime("%a %b %-d")
+        elif game_week and self.league_key in ("cfb", "nfl"):
             context = "Week %d %s" % (game_week, self.lg()["label"])
         else:
             context = "%s %s" % (self.lg()["label"], self.date.strftime("%a %b %-d"))
@@ -1542,26 +1579,27 @@ class App:
             matchup = "%s @ %s" % (aw["abbr"], hm["abbr"])
             up = gm.get("upset")
             sit = gm.get("situation")
+            lg_pfx = ("[%s] " % gm["league"].upper()) if self.league_key == "all" else ""
             if up and up["confirmed"]:
                 u_tag = ("#%s %s" % (up["underdog"]["rank"], up["underdog"]["abbr"])) if up["underdog"]["rank"] else up["underdog"]["abbr"]
                 f_tag = ("#%s %s" % (up["favorite"]["rank"], up["favorite"]["abbr"])) if up["favorite"]["rank"] else up["favorite"]["abbr"]
-                events.append((0 if fav else 1, fav, "live", "%s UPSET  %s beats %s  %s" % (g["upset"], u_tag, f_tag, sc)))
+                events.append((0 if fav else 1, fav, "live", "%s UPSET  %s%s beats %s  %s" % (g["upset"], lg_pfx, u_tag, f_tag, sc)))
             elif up and not up["confirmed"]:
                 u_tag = ("#%s %s" % (up["underdog"]["rank"], up["underdog"]["abbr"])) if up["underdog"]["rank"] else up["underdog"]["abbr"]
                 f_tag = ("#%s %s" % (up["favorite"]["rank"], up["favorite"]["abbr"])) if up["favorite"]["rank"] else up["favorite"]["abbr"]
-                events.append((0 if fav else 1, fav, "accent", "%s UPSET WATCH  %s leads %s  %s  %s" % (g["upset_watch"], u_tag, f_tag, sc, gm["short"])))
+                events.append((0 if fav else 1, fav, "accent", "%s UPSET WATCH  %s%s leads %s  %s  %s" % (g["upset_watch"], lg_pfx, u_tag, f_tag, sc, gm["short"])))
             elif gm["state"] == "in" and sit and sit.get("red_zone"):
-                events.append((0 if fav else 2, fav, "live", "%s RED ZONE  %s  %s  %s" % (g["red_zone"], matchup, sc, sit.get("down_dist") or gm["short"])))
+                events.append((0 if fav else 2, fav, "live", "%s RED ZONE  %s%s  %s  %s" % (g["red_zone"], lg_pfx, matchup, sc, sit.get("down_dist") or gm["short"])))
             elif gm["state"] == "in":
                 lp = ("  ·  " + sit["last_play"][:55]) if (sit and sit.get("last_play")) else ""
-                events.append((0 if fav else 3, fav, "good", "%s LIVE  %s  (%s)%s" % (g["live"], sc, gm["short"] or "In Progress", lp)))
+                events.append((0 if fav else 3, fav, "good", "%s LIVE  %s%s  (%s)%s" % (g["live"], lg_pfx, sc, gm["short"] or "In Progress", lp)))
             elif gm["state"] == "post":
                 ot = " (OT)" if gm.get("is_overtime") else ""
-                events.append((0 if fav else 4, fav, "base", "%s FINAL%s  %s" % (g["final"], ot, sc)))
+                events.append((0 if fav else 4, fav, "base", "%s FINAL%s  %s%s" % (g["final"], ot, lg_pfx, sc)))
             elif gm["state"] == "pre":
                 sp = spread_text(gm["odds"])
                 sp_str = ("  ·  " + sp) if sp else ""
-                events.append((0 if fav else 5, fav, "dim", "%s %s  %s%s" % (g["pregame"], matchup, self.kickoff_str(gm["start"]), sp_str)))
+                events.append((0 if fav else 5, fav, "dim", "%s %s%s  %s%s" % (g["pregame"], lg_pfx, matchup, self.kickoff_str(gm["start"]), sp_str)))
 
         events.sort(key=lambda x: x[0])
         avail = height - 1
@@ -1598,7 +1636,10 @@ class App:
         key = self.board_key()
         games = self.cache_get(key)
         ttl = self.ttl(games)
-        self.ensure(key, lambda: parse_board(self.lg(), self.date, self.week), ttl)
+        if self.league_key == "all":
+            self.ensure(key, lambda: parse_all_boards(self.date), ttl)
+        else:
+            self.ensure(key, lambda: parse_board(self.lg(), self.date, self.week), ttl)
         games = self.cache_get(key)
         if games is None:
             if self.last_error:
@@ -1663,7 +1704,7 @@ class App:
         live = game["state"] == "in"
         sit = game.get("situation") if live else None
         poss = g["poss"] if (sit and sit.get("possession") == side["id"] and side["id"]) else ""
-        fav = self.is_fav(side)
+        fav = self.is_fav(side, game)
         star = g["star"] if fav else ""
         rank_num = side.get("rank")
 
@@ -1712,8 +1753,9 @@ class App:
         up = game.get("upset")
         sit = game.get("situation")
 
+        lg_tag = ("%-4s " % game["league"].upper()) if self.league_key == "all" else ""
         segs = [
-            (cursor + " ", self.attr("focus") if selected else self.attr("base")),
+            (cursor + " " + lg_tag, self.attr("focus") if selected else self.attr("base")),
             (aw_txt, aw_attr),
             (" @ ", self.attr("focus") if selected else self.attr("dim")),
             (hm_txt, hm_attr),
@@ -1796,6 +1838,8 @@ class App:
 
         # Border & Title (matching cfbtui's GameCard)
         titles = []
+        if self.league_key == "all":
+            titles.append(game["league"].upper())
         if up:
             titles.append(("%s UPSET" % g["upset"]) if up["confirmed"] else ("%s UPSET WATCH" % g["upset_watch"]))
         if red_zone:
@@ -1994,7 +2038,8 @@ class App:
             return
         g = self.g()
         key = "detail:%s:%s" % (game["league"], game["id"])
-        data = self.ensure(key, lambda: parse_detail(self.lg(), game["id"]), 20 if game["state"] == "in" else 120)
+        lg = BY_KEY.get(game["league"], self.lg())
+        data = self.ensure(key, lambda: parse_detail(lg, game["id"]), 20 if game["state"] == "in" else 120)
 
         away, home = game["away"], game["home"]
         final = game["state"] == "post"
@@ -2183,7 +2228,7 @@ class App:
         lines = [
             ("NAVIGATION & VIEWS", "accent"),
             ("  Arrow keys / hjkl   Move between game cards (2D grid or list)", "base"),
-            ("  1-6 / Tab           Switch league (CFB, NFL, NHL, NBA, CBB, MLB)" if not self.only else
+            ("  1-7 / Tab           Switch league (1: ALL, 2: CFB, 3: NFL, 4: NHL, 5: NBA, 6: CBB, 7: MLB)" if not self.only else
              "  Standalone Mode     Locked to %s scoreboard" % self.lg()["name"], "base"),
             ("  Enter               Open game detail (linescore, win prob, plays)", "base"),
             ("  R                   Poll rankings (AP / Coaches / CFP side-by-side)", "base"),
@@ -2361,13 +2406,14 @@ class App:
         rows = self.visible(games)
         cols = self.grid_cols(w) if self.layout == "grid" else 1
 
-        if ch in (ord("1"), ord("2"), ord("3"), ord("4"), ord("5"), ord("6")):
+        if ch in (ord("1"), ord("2"), ord("3"), ord("4"), ord("5"), ord("6"), ord("7")):
             if not self.only:
                 self.switch_league(LEAGUES[int(chr(ch)) - 1]["key"])
             elif ch in (ord("1"), ord("2")) and rows:
                 # In standalone league mode (like cfbtui), 1 and 2 star away/home!
-                side = rows[self.selected_index(rows)]["away" if ch == ord("1") else "home"]
-                self.toggle_fav(side)
+                cur_gm = rows[self.selected_index(rows)]
+                side = cur_gm["away" if ch == ord("1") else "home"]
+                self.toggle_fav(side, cur_gm)
         elif ch == 9 and not self.only:  # Tab
             i = [lg["key"] for lg in LEAGUES].index(self.league_key)
             self.switch_league(LEAGUES[(i + 1) % len(LEAGUES)]["key"])
@@ -2442,9 +2488,11 @@ class App:
             self.news_story = None
             self.scr.clear()
         elif ch in (ord("a"), ord("!")) and rows:
-            self.toggle_fav(rows[self.selected_index(rows)]["away"])
+            cur_gm = rows[self.selected_index(rows)]
+            self.toggle_fav(cur_gm["away"], cur_gm)
         elif ch in (ord("h"), ord("@")) and rows:
-            self.toggle_fav(rows[self.selected_index(rows)]["home"])
+            cur_gm = rows[self.selected_index(rows)]
+            self.toggle_fav(cur_gm["home"], cur_gm)
         elif ch == ord("c") and rows:
             self.copy_game_discord(rows[self.selected_index(rows)])
         elif ch == ord("C"):
@@ -2467,7 +2515,7 @@ class App:
         return True
 
     def handle_extra(self, ch):
-        if ch in (ord("1"), ord("2"), ord("3"), ord("4"), ord("5"), ord("6")) and not self.only:
+        if ch in (ord("1"), ord("2"), ord("3"), ord("4"), ord("5"), ord("6"), ord("7")) and not self.only:
             self.switch_league(LEAGUES[int(chr(ch)) - 1]["key"])
         elif ch == ord("R"):
             if self.extra_kind == "ranks":
@@ -2553,7 +2601,8 @@ class App:
         self.extra_tab = self.extra_group = self.extra_sel = self.extra_scroll = 0
         self.view = "board"
         self.filter = "all"
-        self.scr.clear()
+        if self.scr:
+            self.scr.clear()
         self.save_config()
 
     def move(self, delta, rows):
@@ -2563,15 +2612,17 @@ class App:
         idx = max(0, min(len(rows) - 1, idx + delta))
         self.sel_id = rows[idx]["id"]
 
-    def toggle_fav(self, side):
-        key = "%s:%s" % (self.league_key, side["abbr"])
+    def toggle_fav(self, side, game=None):
+        lg = (game.get("league") if game else None) or (self.league_key if self.league_key != "all" else "cfb")
+        key = "%s:%s" % (lg, side["abbr"])
         if key in self.favs:
             self.favs.discard(key)
-            self.say("Unstarred %s %s" % (self.league_key.upper(), side["abbr"]))
+            self.say("Unstarred %s %s" % (lg.upper(), side["abbr"]))
         else:
             self.favs.add(key)
-            self.say("Starred %s %s" % (self.league_key.upper(), side["abbr"]))
-        self.scr.clear()
+            self.say("Starred %s %s" % (lg.upper(), side["abbr"]))
+        if self.scr:
+            self.scr.clear()
         self.save_config()
 
     def open_extra(self, kind):
@@ -2580,7 +2631,8 @@ class App:
         self.extra_sel = self.extra_scroll = 0
         self.extra_group = 0
         self.extra_tab = 0
-        self.scr.clear()
+        if self.scr:
+            self.scr.clear()
 
 
 # --------------------------------------------------------------------------
@@ -2589,7 +2641,9 @@ class App:
 
 def plain(args):
     target = args.league or getattr(args, "only", None)
-    leagues = [BY_KEY[target]] if target else LEAGUES
+    if target == "all":
+        target = None
+    leagues = [BY_KEY[target]] if target else SPORT_LEAGUES
     if target and target not in BY_KEY:
         print("unknown league: %s (choose %s)" % (target, ", ".join(BY_KEY)), file=sys.stderr)
         return 2

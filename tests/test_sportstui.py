@@ -66,9 +66,13 @@ class TestSportstui(unittest.TestCase):
         self.assertEqual(nfl_filtered[0]["id"], "10")
 
     def test_league_order(self):
-        expected_order = ["cfb", "nfl", "nhl", "nba", "cbb", "mlb"]
+        expected_order = ["all", "cfb", "nfl", "nhl", "nba", "cbb", "mlb"]
         actual_order = [lg["key"] for lg in sportstui.LEAGUES]
         self.assertEqual(actual_order, expected_order)
+
+        # 1 is ALL sports together, rest shift to 2: CFB, 3: NFL, 4: NHL, 5: NBA, 6: CBB, 7: MLB
+        self.assertEqual(sportstui.LEAGUES[0]["key"], "all")
+        self.assertEqual([lg["key"] for lg in sportstui.SPORT_LEAGUES], ["cfb", "nfl", "nhl", "nba", "cbb", "mlb"])
 
     def test_glyph_sets(self):
         for name in ("nerd", "unicode", "emoji", "ascii"):
@@ -704,6 +708,49 @@ class TestSportstui(unittest.TestCase):
             last_x, last_w = layout[-1]
             end_x = last_x + last_w
             self.assertLessEqual(end_x, w, f"Card layout overflows width {w}: ends at {end_x}")
+
+    def test_all_sports_mode_and_league_shifting(self):
+        """Test that 1 is ALL sports together, and leagues shift to 2-7."""
+        # 1: ALL, 2: CFB, 3: NFL, 4: NHL, 5: NBA, 6: CBB, 7: MLB
+        keys = [lg["key"] for lg in sportstui.LEAGUES]
+        self.assertEqual(keys, ["all", "cfb", "nfl", "nhl", "nba", "cbb", "mlb"])
+
+        names = [lg["name"] for lg in sportstui.LEAGUES]
+        self.assertEqual(names, ["ALL", "CFB", "NFL", "NHL", "NBA", "CBB", "MLB"])
+
+        opts = sportstui.parse_args([])
+        app = sportstui.App(None, opts)
+        app.switch_league("all")
+        self.assertEqual(app.league_key, "all")
+        self.assertEqual(app.board_key(), f"board:all:{app.date.isoformat()}")
+
+        # Verify card title in ALL mode includes league badge
+        game = {
+            "id": "1",
+            "league": "cfb",
+            "state": "in",
+            "period": 1,
+            "clock": "12:00",
+            "short": "Q1 12:00",
+            "detail": "Q1 12:00",
+            "status_name": "STATUS_IN_PROGRESS",
+            "start": None,
+            "situation": {},
+            "odds": {},
+            "upset": None,
+            "away": {"id": "1", "abbr": "AW", "name": "Away", "score": "7", "score_int": 7, "color": "000000", "rank": None, "record": "1-0"},
+            "home": {"id": "2", "abbr": "HM", "name": "Home", "score": "3", "score_int": 3, "color": "FFFFFF", "rank": None, "record": "0-1"},
+        }
+        drawn_titles = []
+        def mock_draw_box(y, x, h, w, attr, title="", heavy=False):
+            drawn_titles.append(title)
+
+        app.put = lambda *args, **kwargs: None
+        app.fill_line = lambda *args, **kwargs: None
+        app.segment = lambda *args, **kwargs: None
+        app.draw_box = mock_draw_box
+        app.draw_card(game, 0, 0, 42, False)
+        self.assertIn("CFB", drawn_titles[0])
 
 
 if __name__ == "__main__":

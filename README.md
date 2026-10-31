@@ -19,7 +19,7 @@ You can run `sportstui` as a combined multi-league app or launch directly into a
 
 | Command | League | Description |
 | :--- | :--- | :--- |
-| `sportstui` | **All** | Combined multi-league scoreboard (press `1`–`6` or `Tab` to switch) |
+| `sportstui` | **All** | Combined multi-league scoreboard (press `1`–`7` or `Tab` to switch) |
 | `cfbtui` | **CFB** | College Football scoreboard & Top 25 rankings |
 | `nfltui` | **NFL** | NFL scoreboard, weekly slates, and division standings |
 | `nhltui` | **NHL** | NHL scoreboard, standings, and division tables |
@@ -33,7 +33,8 @@ You can run `sportstui` as a combined multi-league app or launch directly into a
 
 | Key | Action |
 | :--- | :--- |
-| `1` – `6` / `Tab` | Switch between CFB, NFL, NHL, NBA, CBB, and MLB *(combined mode only)* |
+| `1` | **ALL**: view all sports together on one unified board |
+| `2` – `7` / `Tab` | Switch between **2: CFB**, **3: NFL**, **4: NHL**, **5: NBA**, **6: CBB**, and **7: MLB** *(combined mode only)* |
 | `[` / `]` | Previous / next day |
 | `w` / `W` | Next / previous week *(CFB and NFL only)* |
 | `t` | Jump to today's games |
