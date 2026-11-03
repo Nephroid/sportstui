@@ -102,13 +102,25 @@ Favorites and layout settings are stored in `~/.config/sportstui/config.json`:
 ## Responsive Grid Layout & Auto-Reflow
 
 `sportstui` dynamically calculates column layouts to match terminal geometry:
-- **Widescreen / Fullscreen** (`width >= 180`): Renders **5 columns** of game cards across the display.
-- **Half-page / Tiled Split** (`72 <= width < 108`): Renders **2 columns** of game cards, ideal for 50/50 window splits on 14" Chromebooks (e.g. ASUS CM34 Flip).
-- **Standard Terminal** (`108 <= width < 144`): Renders **3 columns** (`~132` cols).
-- **Wide Terminal** (`144 <= width < 180`): Renders **4 columns**.
-- **Compact Window** (`width < 72`): Automatically collapses into a single-column layout.
+- **Ultra-Wide / Fullscreen** (`width >= 200`): Renders **6 columns** of game cards across the display (ideal for fullscreen on 14" Chromebooks like ASUS CM34 Flip in `foot` ~206 cols).
+- **Widescreen** (`170 <= width < 200`): Renders **5 columns** of game cards.
+- **Wide Terminal** (`136 <= width < 170`): Renders **4 columns** (`~144` cols).
+- **Standard Terminal** (`105 <= width < 136`): Renders **3 columns** (`~132` cols).
+- **Half-page / Tiled Split** (`70 <= width < 105`): Renders **2 columns** of game cards, ideal for 50/50 window splits on 14" Chromebooks (~100–104 cols).
+- **Compact Window** (`width < 70`): Automatically collapses into a single-column layout.
 
-Card widths expand dynamically (`width: 1fr` behavior matching `cfbtui`) while preserving the 8-column visual prefix, 40-column inner text alignment, and full clock digits.
+You can also force any column count manually via the CLI or config:
+```bash
+sportstui --cols 6    # or -c 6
+```
+Or in `~/.config/sportstui/config.json`:
+```json
+{
+  "cols": 6
+}
+```
+
+Card widths expand dynamically (`width: 1fr` behavior matching `cfbtui`) while preserving the 8-column visual prefix, team alignment, timeouts indicators (`●●●`), and clock digits.
 
 ---
 

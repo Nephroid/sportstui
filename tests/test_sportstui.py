@@ -669,23 +669,48 @@ class TestSportstui(unittest.TestCase):
         self.assertEqual(len(extra_seg), 1)
 
     def test_grid_cols_widescreen_and_half_page(self):
-        """Test column calculation matching cfbtui: 5 cols widescreen, 2 cols half-page on CM34."""
+        """Test column calculation: 6 cols widescreen (W >= 200), 5 cols (170-199), 2 cols half-page on CM34."""
         opts = sportstui.parse_args([])
         app = sportstui.App(None, opts)
 
-        # Widescreen on CM34 Flip (Hyprland fullscreen foot ~180-206 cols)
-        self.assertEqual(app.grid_cols(206), 5)
-        self.assertEqual(app.grid_cols(180), 5)
+        # Widescreen on CM34 Flip (Hyprland fullscreen foot ~200-206 cols)
+        self.assertEqual(app.grid_cols(206), 6)
+        self.assertEqual(app.grid_cols(200), 6)
 
-        # Half-page on CM34 Flip (Hyprland 50/50 split ~100-104 cols)
-        self.assertEqual(app.grid_cols(100), 2)
-        self.assertEqual(app.grid_cols(104), 2)
+        # Widescreen / Wide terminal
+        self.assertEqual(app.grid_cols(199), 5)
+        self.assertEqual(app.grid_cols(180), 5)
+        self.assertEqual(app.grid_cols(170), 5)
 
         # Intermediate widths
-        self.assertEqual(app.grid_cols(132), 3)
+        self.assertEqual(app.grid_cols(169), 4)
         self.assertEqual(app.grid_cols(144), 4)
-        self.assertEqual(app.grid_cols(70), 1)
+        self.assertEqual(app.grid_cols(136), 4)
+        self.assertEqual(app.grid_cols(135), 3)
+        self.assertEqual(app.grid_cols(132), 3)
+        self.assertEqual(app.grid_cols(105), 3)
+
+        # Half-page on CM34 Flip (Hyprland 50/50 split ~100-104 cols)
+        self.assertEqual(app.grid_cols(104), 2)
+        self.assertEqual(app.grid_cols(100), 2)
+        self.assertEqual(app.grid_cols(70), 2)
+
+        # Compact widths
+        self.assertEqual(app.grid_cols(69), 1)
         self.assertEqual(app.grid_cols(36), 1)
+
+    def test_grid_cols_forced_flag_and_config(self):
+        """Test that --cols CLI flag and config override dynamic reflow."""
+        opts = sportstui.parse_args(["--cols", "6"])
+        self.assertEqual(opts.cols, 6)
+        app = sportstui.App(None, opts)
+        self.assertEqual(app.grid_cols(100), 6)
+        self.assertEqual(app.grid_cols(80), 6)
+
+        opts_c = sportstui.parse_args(["-c", "4"])
+        self.assertEqual(opts_c.cols, 4)
+        app_c = sportstui.App(None, opts_c)
+        self.assertEqual(app_c.grid_cols(206), 4)
 
     def test_card_layout_fits_terminal(self):
         """Test card layout distributes width evenly with 1-char gutter and fits within terminal."""
@@ -700,7 +725,7 @@ class TestSportstui(unittest.TestCase):
 
             for i in range(len(layout)):
                 x_i, w_i = layout[i]
-                self.assertGreaterEqual(w_i, 34, f"Card width {w_i} < 34 at terminal width {w}")
+                self.assertGreaterEqual(w_i, 32, f"Card width {w_i} < 32 at terminal width {w}")
                 if i > 0:
                     prev_x, prev_w = layout[i - 1]
                     self.assertEqual(x_i, prev_x + prev_w + 1, f"Gutter mismatch between cols {i-1} and {i} at width {w}")

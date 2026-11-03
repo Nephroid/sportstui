@@ -1074,6 +1074,12 @@ class App:
         self.date = opts.date or today()
         self.week = getattr(opts, "week", None)
         self.layout = opts.layout or self.cfg.get("layout") or "grid"
+        self.forced_cols = getattr(opts, "cols", None) or self.cfg.get("cols")
+        if self.forced_cols is not None:
+            try:
+                self.forced_cols = max(1, int(self.forced_cols))
+            except (ValueError, TypeError):
+                self.forced_cols = None
         self.glyphs = opts.glyphs or self.cfg.get("glyphs") or "nerd"
         self.view = "board"          # board | extra | detail | news | help | group_picker
         self.filter = "all"
@@ -1119,6 +1125,8 @@ class App:
             "glyphs": self.glyphs,
             "favorites": sorted(self.favs),
         }
+        if self.forced_cols is not None:
+            data["cols"] = self.forced_cols
         try:
             os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
             with open(CONFIG_PATH, "w", encoding="utf-8") as fh:
@@ -1639,10 +1647,22 @@ class App:
 
     # -- board -------------------------------------------------------------
     def grid_cols(self, width):
-        return max(1, width // 36)
+        if self.forced_cols:
+            return max(1, self.forced_cols)
+        if width >= 200:
+            return 6
+        if width >= 170:
+            return 5
+        if width >= 136:
+            return 4
+        if width >= 105:
+            return 3
+        if width >= 70:
+            return 2
+        return 1
 
     def card_layout(self, width, cols):
-        avail = max(cols * 34, (width - 2) - (cols - 1))
+        avail = max(cols * 32, (width - 2) - (cols - 1))
         base_cw = avail // cols
         rem = avail % cols
         layout = []
@@ -2760,6 +2780,7 @@ def build_parser(prog="sportstui"):
     parser.add_argument("--date", type=lambda s: dt.date.fromisoformat(s), help="YYYY-MM-DD")
     parser.add_argument("--week", type=int, help="start on week N (CFB / NFL only)")
     parser.add_argument("--layout", choices=["grid", "list"])
+    parser.add_argument("--cols", "-c", type=int, help="number of grid columns (default: auto reflow)")
     parser.add_argument("--glyphs", choices=list(GLYPHS))
     parser.add_argument("--plain", action="store_true", help="print the board and exit")
     parser.add_argument("--version", action="version", version="%s %s" % (prog, VERSION))
