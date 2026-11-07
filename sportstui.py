@@ -2289,6 +2289,7 @@ class App:
                 ("T", "Standings"),
                 ("N", "News"),
                 ("c", "Copy"),
+                ("$", "Vegas"),
             ]
             if not self.only:
                 items.append(("1-%d" % len(LEAGUES), "League"))
@@ -3232,6 +3233,7 @@ class App:
             ("  o                   Filter by conference / division / weight class", "base"),
             ("  a / h (or ! / @)    Star / unstar away/blue or home/red corner as favorite", "base"),
             ("  c / C               Copy selected game (c) or whole board (C) for Discord", "base"),
+            ("  $ / B               Launch Vegas Sportsbook board (vegastui)", "base"),
             ("  g                   Cycle icon set: nerd / unicode / emoji / ascii", "base"),
             ("  r                   Force refresh immediately", "base"),
             ("  Esc                 Back to scoreboard", "base"),
@@ -3352,6 +3354,32 @@ class App:
             self.say("Copied board (%d games) for Discord" % min(len(rows), 35))
         else:
             self.say("Clipboard tool (wl-copy/xclip) not found")
+
+    def launch_vegastui(self):
+        """Cleanly suspend curses and launch vegastui with active league and date."""
+        cmd = ["vegastui"]
+        lg = self.lg()["key"]
+        if lg:
+            cmd.extend(["--league", lg])
+        if self.date:
+            cmd.extend(["--date", self.date.isoformat()])
+        if self.week and lg in ("cfb", "nfl"):
+            cmd.extend(["--week", str(self.week)])
+
+        exe = shutil.which("vegastui") or os.path.expanduser("~/Work/vegastui/vegastui")
+        if not shutil.which("vegastui") and not os.path.exists(exe):
+            self.say("vegastui launcher not found")
+            return
+        cmd[0] = exe
+        curses.endwin()
+        try:
+            subprocess.run(cmd)
+        except Exception:
+            pass
+        finally:
+            self.scr.clear()
+            self.init_colors()
+            self.refresh_data()
 
     # -- input -------------------------------------------------------------
     def handle(self, ch):
@@ -3493,6 +3521,8 @@ class App:
             self.copy_game_discord(rows[self.selected_index(rows)])
         elif ch == ord("C"):
             self.copy_board_discord(rows)
+        elif ch in (ord("$"), ord("B")):
+            self.launch_vegastui()
         return True
 
     def handle_detail(self, ch):
