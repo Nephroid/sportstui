@@ -1920,6 +1920,40 @@ class App:
             return (self.pair(16, self.focus_col) if curses.COLORS >= 256 else curses.A_REVERSE) | curses.A_BOLD
         return curses.A_NORMAL
 
+    def breathing_attr(self, kind):
+        """Dynamic pulsing breathing attribute for Red Zone and Upset alert cards."""
+        if not self.colours:
+            return curses.A_BOLD
+
+        # 4-stage breathing pulse cycle (~1.25s per breath, ~312ms per stage)
+        phase = int(time.time() * 3.2) % 4
+
+        if kind == "red_zone":
+            if curses.COLORS >= 256:
+                # 160: crimson -> 196: neon red -> 203: coral flare -> 196: neon red
+                ramp = [160, 196, 203, 196]
+                col = ramp[phase]
+                attr = self.pair(col)
+                if phase in (1, 2):
+                    attr |= curses.A_BOLD
+                return attr
+            else:
+                return self.pair(curses.COLOR_WHITE if phase == 2 else curses.COLOR_RED) | curses.A_BOLD
+
+        if kind == "upset":
+            if curses.COLORS >= 256:
+                # 178: warm amber -> 214: rich gold -> 226: electric yellow -> 214: rich gold
+                ramp = [178, 214, 226, 214]
+                col = ramp[phase]
+                attr = self.pair(col)
+                if phase in (1, 2):
+                    attr |= curses.A_BOLD
+                return attr
+            else:
+                return self.pair(curses.COLOR_WHITE if phase == 2 else curses.COLOR_YELLOW) | curses.A_BOLD
+
+        return self.attr("accent")
+
     # -- data --------------------------------------------------------------
     def cache_get(self, key):
         ent = self.cache.get(key)
@@ -2567,9 +2601,9 @@ class App:
             segs.append((riv_lbl, self.attr("accent")))
         if up:
             lbl = ("  %s UPSET" % g["upset"]) if up["confirmed"] else ("  %s UPSET WATCH" % g["upset_watch"])
-            segs.append((lbl, self.attr("accent")))
+            segs.append((lbl, self.breathing_attr("upset")))
         if live and sit and sit.get("red_zone"):
-            segs.append(("  %s RED ZONE" % g["red_zone"], self.attr("live")))
+            segs.append(("  %s RED ZONE" % g["red_zone"], self.breathing_attr("red_zone")))
         self.segment(y, 0, segs, width)
 
     # -- grid layout (cfbtui grid.png exact style) -------------------------
@@ -2664,11 +2698,18 @@ class App:
 
         heavy = bool(selected or up or red_zone or game.get("rivalry"))
         if selected:
-            border_attr = self.attr("focus")
+            if red_zone:
+                phase = int(time.time() * 3.2) % 4
+                border_attr = self.breathing_attr("red_zone") if phase in (1, 2) else self.attr("focus")
+            elif up:
+                phase = int(time.time() * 3.2) % 4
+                border_attr = self.breathing_attr("upset") if phase in (1, 2) else self.attr("focus")
+            else:
+                border_attr = self.attr("focus")
         elif red_zone:
-            border_attr = self.attr("live")
+            border_attr = self.breathing_attr("red_zone")
         elif up:
-            border_attr = self.attr("accent")
+            border_attr = self.breathing_attr("upset")
         elif game.get("rivalry"):
             border_attr = self.attr("accent")
         elif live:

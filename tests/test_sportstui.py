@@ -1506,6 +1506,36 @@ class TestSportstui(unittest.TestCase):
             self.assertEqual(items[1]["id"], "101")
             self.assertEqual(items[1]["league"], "CFB")
 
+    def test_breathing_attr_and_animated_borders(self):
+        """Test breathing animation attribute generation and card integration."""
+        opts = sportstui.parse_args([])
+        app = sportstui.App(None, opts)
+
+        # 1. Breathing attributes return valid integers
+        a_rz = app.breathing_attr("red_zone")
+        a_up = app.breathing_attr("upset")
+        self.assertIsInstance(a_rz, int)
+        self.assertIsInstance(a_up, int)
+
+        # 2. Card border in red zone uses breathing attribute and heavy border
+        game_rz = {
+            "id": "1", "state": "in", "short": "Q4 02:15", "league": "nfl",
+            "away": {"id": "1", "name": "Packers", "abbr": "GB", "color": "203731", "score": "20", "score_int": 20},
+            "home": {"id": "2", "name": "Lions", "abbr": "DET", "color": "0076B6", "score": "24", "score_int": 24},
+            "situation": {"red_zone": True, "down_dist": "1st & Goal at DET 4"},
+        }
+        captured_boxes = []
+        app.draw_box = lambda y, x, h, w, attr, title="", heavy=False: captured_boxes.append((attr, title, heavy))
+        app.put = lambda *a, **kw: None
+        app.fill_line = lambda *a, **kw: None
+        app.segment = lambda *a, **kw: None
+
+        app.draw_card(game_rz, 0, 0, 42, False)
+        self.assertEqual(len(captured_boxes), 1)
+        attr, title, heavy = captured_boxes[0]
+        self.assertTrue(heavy)
+        self.assertIn("RED ZONE", title)
+
 
 if __name__ == "__main__":
     unittest.main()
