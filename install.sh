@@ -22,7 +22,7 @@ ln -sf "${TARGET}" "${BIN_DIR}/sportstui"
 echo "    Linked: ${BIN_DIR}/sportstui -> ${TARGET}"
 
 # 3. Individual league launchers
-ALIASES=("cfbtui" "cbbtui" "ncaabtui" "nbatui" "nhltui" "mlbtui" "nfltui")
+ALIASES=("cfbtui" "cbbtui" "ncaabtui" "nbatui" "nhltui" "mlbtui" "nfltui" "ufctui" "mmalui" "mmatui" "boxtui")
 
 for cmd in "${ALIASES[@]}"; do
     ln -sf "sportstui" "${BIN_DIR}/${cmd}"
@@ -32,12 +32,14 @@ done
 echo
 echo "==> Installation complete!"
 echo "    Available commands:"
-echo "      sportstui : Combined 6-league scoreboard (1-6 to switch)"
+echo "      sportstui : Combined 8-league scoreboard (1-9 to switch)"
 echo "      cfbtui    : College Football"
 echo "      cbbtui    : College Basketball (Men's) [also ncaabtui]"
 echo "      nbatui    : NBA"
 echo "      nhltui    : NHL"
 echo "      mlbtui    : MLB"
 echo "      nfltui    : NFL"
+echo "      ufctui    : UFC / MMA scoreboard, bouts & rankings [also mmalui, mmatui]"
+echo "      boxtui    : Boxing scoreboard, bouts & schedule"
 echo
 "${BIN_DIR}/sportstui" --version

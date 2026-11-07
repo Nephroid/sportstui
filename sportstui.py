@@ -35,10 +35,11 @@ import urllib.request
 import webbrowser
 from zoneinfo import ZoneInfo
 
-VERSION = "1.2.0"
-UA = "sportstui/1.2 (terminal scoreboard)"
+VERSION = "1.3.0"
+UA = "sportstui/1.3 (terminal scoreboard)"
 SITE = "https://site.api.espn.com/apis/site/v2/sports"
 CORE = "https://site.api.espn.com/apis/v2/sports"
+BOXERBOOK_BASE = "https://boxerbook.com/v1"
 EASTERN = ZoneInfo("America/New_York")
 CONFIG_PATH = os.path.expanduser(
     os.environ.get("SPORTSTUI_CONFIG", "~/.config/sportstui/config.json")
@@ -52,15 +53,18 @@ ALL_LEAGUE = {
     "poll": False,
     "period_prefix": "",
     "reg_periods": 4,
+    "combat": False,
 }
 
 SPORT_LEAGUES = [
-    {"key": "cfb", "name": "CFB", "label": "FBS", "path": "football/college-football", "poll": True, "period_prefix": "Q", "reg_periods": 4},
-    {"key": "nfl", "name": "NFL", "label": "NFL", "path": "football/nfl", "poll": False, "period_prefix": "Q", "reg_periods": 4},
-    {"key": "nhl", "name": "NHL", "label": "NHL", "path": "hockey/nhl", "poll": False, "period_prefix": "P", "reg_periods": 3},
-    {"key": "nba", "name": "NBA", "label": "NBA", "path": "basketball/nba", "poll": False, "period_prefix": "Q", "reg_periods": 4},
-    {"key": "cbb", "name": "CBB", "label": "NCAAM", "path": "basketball/mens-college-basketball", "poll": True, "period_prefix": "H", "reg_periods": 2},
-    {"key": "mlb", "name": "MLB", "label": "MLB", "path": "baseball/mlb", "poll": False, "period_prefix": "", "reg_periods": 9},
+    {"key": "cfb", "name": "CFB", "label": "FBS", "path": "football/college-football", "poll": True, "period_prefix": "Q", "reg_periods": 4, "combat": False},
+    {"key": "nfl", "name": "NFL", "label": "NFL", "path": "football/nfl", "poll": False, "period_prefix": "Q", "reg_periods": 4, "combat": False},
+    {"key": "nhl", "name": "NHL", "label": "NHL", "path": "hockey/nhl", "poll": False, "period_prefix": "P", "reg_periods": 3, "combat": False},
+    {"key": "nba", "name": "NBA", "label": "NBA", "path": "basketball/nba", "poll": False, "period_prefix": "Q", "reg_periods": 4, "combat": False},
+    {"key": "cbb", "name": "CBB", "label": "NCAAM", "path": "basketball/mens-college-basketball", "poll": True, "period_prefix": "H", "reg_periods": 2, "combat": False},
+    {"key": "mlb", "name": "MLB", "label": "MLB", "path": "baseball/mlb", "poll": False, "period_prefix": "", "reg_periods": 9, "combat": False},
+    {"key": "ufc", "name": "UFC", "label": "UFC", "path": "mma/ufc", "poll": True, "period_prefix": "R", "reg_periods": 3, "combat": True},
+    {"key": "box", "name": "BOX", "label": "BOX", "path": "boxing", "poll": False, "period_prefix": "R", "reg_periods": 12, "combat": True},
 ]
 
 LEAGUES = [ALL_LEAGUE] + SPORT_LEAGUES
@@ -162,6 +166,27 @@ LEAGUE_GROUPS = {
         ("nl_central", "NL Central"),
         ("nl_west", "NL West"),
     ],
+    "ufc": [
+        ("heavyweight", "Heavyweight"),
+        ("light_heavyweight", "Light Heavyweight"),
+        ("middleweight", "Middleweight"),
+        ("welterweight", "Welterweight"),
+        ("lightweight", "Lightweight"),
+        ("featherweight", "Featherweight"),
+        ("bantamweight", "Bantamweight"),
+        ("flyweight", "Flyweight"),
+        ("strawweight", "Strawweight"),
+    ],
+    "box": [
+        ("heavyweight", "Heavyweight"),
+        ("cruiserweight", "Cruiserweight"),
+        ("light_heavyweight", "Light Heavyweight"),
+        ("super_middleweight", "Super Middleweight"),
+        ("middleweight", "Middleweight"),
+        ("welterweight", "Welterweight"),
+        ("lightweight", "Lightweight"),
+        ("featherweight", "Featherweight"),
+    ],
 }
 
 PRO_TEAM_GROUPS = {
@@ -199,6 +224,101 @@ PRO_TEAM_GROUPS = {
     },
 }
 
+RIVALRIES = {
+    # CFB
+    ("cfb", frozenset(["MSU", "MICH"])): "Paul Bunyan Trophy",
+    ("cfb", frozenset(["OSU", "MICH"])): "The Game",
+    ("cfb", frozenset(["BYU", "UTAH"])): "Holy War",
+    ("cfb", frozenset(["BAMA", "AUB"])): "Iron Bowl",
+    ("cfb", frozenset(["TEX", "OKLA"])): "Red River Rivalry",
+    ("cfb", frozenset(["ARMY", "NAVY"])): "Army–Navy Game",
+    ("cfb", frozenset(["ND", "USC"])): "Jeweled Shillelagh",
+    ("cfb", frozenset(["ORE", "WASH"])): "Cascade Clash",
+    ("cfb", frozenset(["FLA", "UGA"])): "Cocktail Party",
+    ("cfb", frozenset(["FLA", "FSU"])): "Sunshine Showdown",
+    ("cfb", frozenset(["MINN", "WIS"])): "Paul Bunyan's Axe",
+    ("cfb", frozenset(["IOWA", "WIS"])): "Heartland Trophy",
+    ("cfb", frozenset(["IOWA", "MINN"])): "Floyd of Rosedale",
+    ("cfb", frozenset(["IOWA", "ISU"])): "Cy-Hawk Trophy",
+    ("cfb", frozenset(["IND", "PUR"])): "Old Oaken Bucket",
+    ("cfb", frozenset(["ILL", "NU"])): "Land of Lincoln Trophy",
+    ("cfb", frozenset(["ILL", "NW"])): "Land of Lincoln Trophy",
+    ("cfb", frozenset(["CAL", "STAN"])): "The Big Game",
+    ("cfb", frozenset(["CLEM", "SC"])): "Palmetto Bowl",
+    ("cfb", frozenset(["LSU", "MISS"])): "Magnolia Bowl",
+    ("cfb", frozenset(["MISS", "MSST"])): "Egg Bowl",
+    ("cfb", frozenset(["TEX", "TAMU"])): "Lone Star Showdown",
+    ("cfb", frozenset(["UCLA", "USC"])): "Victory Bell",
+    ("cfb", frozenset(["COLO", "CSU"])): "Rocky Mountain Showdown",
+    ("cfb", frozenset(["ARIZ", "ASU"])): "Territorial Cup",
+    ("cfb", frozenset(["KSU", "KU"])): "Sunflower Showdown",
+    ("cfb", frozenset(["PITT", "WVU"])): "Backyard Brawl",
+    ("cfb", frozenset(["UNC", "DUKE"])): "Victory Bell",
+    ("cfb", frozenset(["VT", "UVA"])): "Commonwealth Cup",
+    ("cfb", frozenset(["ORST", "ORE"])): "Civil War",
+    ("cfb", frozenset(["WSU", "WASH"])): "Apple Cup",
+    ("cfb", frozenset(["MIZ", "KU"])): "Border War",
+    ("cfb", frozenset(["STAN", "SJSU"])): "Bill Walsh Legacy Game",
+
+    # CBB
+    ("cbb", frozenset(["DUKE", "UNC"])): "Tobacco Road Rivalry",
+    ("cbb", frozenset(["UK", "LOU"])): "Battle for the Bluegrass",
+    ("cbb", frozenset(["IND", "PUR"])): "Indiana–Purdue Rivalry",
+    ("cbb", frozenset(["MSU", "MICH"])): "Michigan–Michigan State Rivalry",
+    ("cbb", frozenset(["KU", "KSU"])): "Sunflower Showdown",
+    ("cbb", frozenset(["CIN", "XAV"])): "Crosstown Shootout",
+    ("cbb", frozenset(["GU", "SMC"])): "WCC Rivalry",
+    ("cbb", frozenset(["UCLA", "ARIZ"])): "Pac-12 Classic",
+    ("cbb", frozenset(["TEX", "TAMU"])): "Lone Star Rivalry",
+
+    # NFL
+    ("nfl", frozenset(["GB", "CHI"])): "Bears–Packers Rivalry",
+    ("nfl", frozenset(["PIT", "BAL"])): "Ravens–Steelers Rivalry",
+    ("nfl", frozenset(["DAL", "PHI"])): "Cowboys–Eagles Rivalry",
+    ("nfl", frozenset(["DAL", "WSH"])): "Cowboys–Commanders Rivalry",
+    ("nfl", frozenset(["DAL", "WAS"])): "Cowboys–Commanders Rivalry",
+    ("nfl", frozenset(["KC", "LV"])): "Raiders–Chiefs Rivalry",
+    ("nfl", frozenset(["PIT", "CIN"])): "Battle of Ohio",
+    ("nfl", frozenset(["NYG", "PHI"])): "Giants–Eagles Rivalry",
+    ("nfl", frozenset(["SF", "SEA"])): "49ers–Seahawks Rivalry",
+    ("nfl", frozenset(["ATL", "NO"])): "Falcons–Saints Rivalry",
+    ("nfl", frozenset(["DET", "GB"])): "Lions–Packers Rivalry",
+    ("nfl", frozenset(["DET", "CHI"])): "Lions–Bears Rivalry",
+    ("nfl", frozenset(["MIN", "GB"])): "Vikings–Packers Rivalry",
+    ("nfl", frozenset(["NYG", "DAL"])): "Giants–Cowboys Rivalry",
+
+    # NBA
+    ("nba", frozenset(["BOS", "LAL"])): "Celtics–Lakers Rivalry",
+    ("nba", frozenset(["BOS", "PHI"])): "76ers–Celtics Rivalry",
+    ("nba", frozenset(["NY", "BOS"])): "Knicks–Celtics Rivalry",
+    ("nba", frozenset(["GS", "CLE"])): "Warriors–Cavaliers Rivalry",
+    ("nba", frozenset(["LAL", "LAC"])): "Battle of LA",
+    ("nba", frozenset(["NY", "BKN"])): "Battle of the Boroughs",
+    ("nba", frozenset(["CHI", "DET"])): "Bulls–Pistons Rivalry",
+    ("nba", frozenset(["IND", "NY"])): "Pacers–Knicks Rivalry",
+    ("nba", frozenset(["MIA", "NY"])): "Heat–Knicks Rivalry",
+
+    # NHL
+    ("nhl", frozenset(["MTL", "BOS"])): "Bruins–Canadiens Rivalry",
+    ("nhl", frozenset(["TOR", "MTL"])): "Maple Leafs–Canadiens Rivalry",
+    ("nhl", frozenset(["NYR", "NYI"])): "Battle of New York",
+    ("nhl", frozenset(["PIT", "PHI"])): "Battle of Pennsylvania",
+    ("nhl", frozenset(["EDM", "CGY"])): "Battle of Alberta",
+    ("nhl", frozenset(["DET", "COL"])): "Red Wings–Avalanche Rivalry",
+    ("nhl", frozenset(["DET", "CHI"])): "Blackhawks–Red Wings Rivalry",
+    ("nhl", frozenset(["TOR", "OTT"])): "Battle of Ontario",
+
+    # MLB
+    ("mlb", frozenset(["NYY", "BOS"])): "Yankees–Red Sox Rivalry",
+    ("mlb", frozenset(["LAD", "SF"])): "Dodgers–Giants Rivalry",
+    ("mlb", frozenset(["CHC", "STL"])): "Cubs–Cardinals Rivalry",
+    ("mlb", frozenset(["NYY", "NYM"])): "Subway Series",
+    ("mlb", frozenset(["CHC", "CHW"])): "Crosstown Classic",
+    ("mlb", frozenset(["LAD", "LAA"])): "Freeway Series",
+    ("mlb", frozenset(["OAK", "SF"])): "Bay Bridge Series",
+    ("mlb", frozenset(["ATH", "SF"])): "Bay Bridge Series",
+}
+
 GLYPHS = {
     "nerd": {
         "tl": "╭", "tr": "╮", "bl": "╰", "br": "┘",
@@ -209,6 +329,7 @@ GLYPHS = {
         "kickoff": "", "period": "",
         "td": "", "fg": "◎", "score": "",
         "red_zone": "", "poss": "\uf0da",
+        "rivalry": "",
         "timeout": "", "timeout_used": "",
         "upset": "", "upset_watch": "",
         "fresh": "", "stale": "", "error": "", "loading": "", "refresh": "",
@@ -224,6 +345,7 @@ GLYPHS = {
         "kickoff": "⚐", "period": "»",
         "td": "★", "fg": "◆", "score": "•",
         "red_zone": "⚑", "poss": "▶",
+        "rivalry": "⚔",
         "timeout": "●", "timeout_used": "○",
         "upset": "⚡", "upset_watch": "◉",
         "fresh": "✔", "stale": "⌛", "error": "✖", "loading": "…", "refresh": "↻",
@@ -239,6 +361,7 @@ GLYPHS = {
         "kickoff": "🚀", "period": "⏭",
         "td": "🏈", "fg": "🎯", "score": "🔔",
         "red_zone": "🔥", "poss": "👉",
+        "rivalry": "🔥",
         "timeout": "🟢", "timeout_used": "⚪",
         "upset": "⚡", "upset_watch": "👀",
         "fresh": "✅", "stale": "⏳", "error": "❌", "loading": "🔃", "refresh": "🔄",
@@ -254,6 +377,7 @@ GLYPHS = {
         "kickoff": ">", "period": ">>",
         "td": "#", "fg": "^", "score": "*",
         "red_zone": "!!", "poss": ">",
+        "rivalry": "[RIVALRY]",
         "timeout": "o", "timeout_used": ".",
         "upset": "!!!", "upset_watch": "?",
         "fresh": "ok", "stale": "~", "error": "x", "loading": "...", "refresh": "@",
@@ -314,6 +438,8 @@ def period_label(lg_key, period):
     if not period:
         return ""
     lg = BY_KEY.get(lg_key, LEAGUES[0])
+    if lg.get("combat"):
+        return "R%d" % period
     reg = lg.get("reg_periods", 4)
     prefix = lg.get("period_prefix", "Q")
     if lg_key == "mlb":
@@ -371,11 +497,28 @@ def parse_side(comp):
         score_int = int(float(score_raw)) if score_raw is not None and score_raw != "" else 0
     except (TypeError, ValueError):
         score_int = 0
+    short = team.get("shortDisplayName") or ""
+    loc = team.get("location") or ""
+    full = team.get("displayName") or ""
+    name_prop = team.get("name") or ""
+    abbr = team.get("abbreviation") or ""
+
+    t_name = short
+    if not t_name or (abbr and t_name.strip().upper() == abbr.strip().upper()):
+        if loc and loc.strip().upper() != abbr.strip().upper():
+            t_name = loc
+        elif full and full.strip().upper() != abbr.strip().upper():
+            t_name = full
+        elif name_prop:
+            t_name = name_prop
+        else:
+            t_name = short or loc or full or abbr or "?"
+
     return {
         "id": str(team.get("id") or ""),
-        "abbr": team.get("abbreviation") or team.get("shortDisplayName") or "?",
-        "name": team.get("shortDisplayName") or team.get("location") or team.get("name") or "?",
-        "full": team.get("displayName") or team.get("shortDisplayName") or "?",
+        "abbr": abbr or short or "?",
+        "name": t_name,
+        "full": full or short or "?",
         "color": (team.get("color") or "444444").lstrip("#"),
         "alt_color": (team.get("alternateColor") or "888888").lstrip("#"),
         "score": str(score_int) if score_raw is not None else "0",
@@ -477,6 +620,15 @@ def parse_game(ev, lg):
     clock = status_obj.get("displayClock") or ""
     sit = parse_situation(comp.get("situation"))
     upset = evaluate_upset(sides["away"], sides["home"], state, odds)
+    rivalry = None
+    for note in comp.get("notes") or []:
+        hl = (note.get("headline") or "").strip()
+        if any(w in hl.lower() for w in ("trophy", "rivalry", "cup", "axe", "bucket", "bell", "war", "game", "bowl", "shootout", "brawl")):
+            rivalry = hl
+            break
+    if not rivalry:
+        pair = frozenset([sides["away"]["abbr"].upper(), sides["home"]["abbr"].upper()])
+        rivalry = RIVALRIES.get((lg["key"], pair))
     return {
         "id": str(ev.get("id")),
         "league": lg["key"],
@@ -495,12 +647,274 @@ def parse_game(ev, lg):
         "odds": odds,
         "situation": sit,
         "upset": upset,
+        "rivalry": rivalry,
         "venue": dig(comp, "venue", "fullName", default="") or "",
         "tv": tv,
     }
 
 
-def parse_board(lg, date, week=None):
+def _unpack_ufc_events(events):
+    games = []
+    for ev in events:
+        ev_id = str(ev.get("id"))
+        ev_name = ev.get("name") or ev.get("shortName") or "UFC Fight Card"
+        venues = ev.get("venues") or []
+        venue = (venues[0].get("fullName") or "") if venues else ""
+        comps = ev.get("competitions") or []
+        for idx, comp in enumerate(comps):
+            comp_id = str(comp.get("id") or idx)
+            wc = (comp.get("type") or {}).get("abbreviation") or (comp.get("type") or {}).get("text") or "Bout"
+            is_title = any("title" in (t.get("text") or "").lower() for t in comp.get("types") or [])
+            is_main_event = (idx == len(comps) - 1)
+            # Filter: only include title fights and big events (main events / championship fights)
+            if not (is_title or is_main_event):
+                continue
+            st_obj = comp.get("status") or {}
+            st_type = st_obj.get("type") or {}
+            state = st_type.get("state") or "pre"
+            period = st_obj.get("period") or 0
+            clock = st_obj.get("displayClock") or ""
+
+            competitors = comp.get("competitors") or []
+            if len(competitors) < 2:
+                continue
+
+            red = competitors[0] if competitors[0].get("order") == 1 else competitors[1]
+            blue = competitors[1] if competitors[0].get("order") == 1 else competitors[0]
+
+            def _parse_f(c, is_red):
+                ath = c.get("athlete") or {}
+                recs = [r.get("summary") for r in c.get("records") or [] if r.get("summary")]
+                rec = recs[0] if recs else ""
+                winner = bool(c.get("winner"))
+                name = ath.get("shortName") or ath.get("displayName") or "?"
+                full = ath.get("displayName") or name
+                rank = ath.get("rank") or c.get("curatedRank")
+                if rank in (0, 99, None):
+                    rank = None
+                return {
+                    "id": str(ath.get("id") or c.get("id") or ""),
+                    "abbr": name,
+                    "name": name,
+                    "full": full,
+                    "color": "CC0000" if is_red else "0047AB",
+                    "alt_color": "444444",
+                    "score": "✔" if winner else ("" if state == "pre" else "-"),
+                    "score_int": 1 if winner else 0,
+                    "record": rec,
+                    "rank": rank,
+                    "winner": winner,
+                    "logo": (ath.get("flag") or {}).get("href") or "",
+                    "conf_id": "",
+                }
+
+            away_f = _parse_f(blue, False)
+            home_f = _parse_f(red, True)
+
+            tv = comp.get("broadcast") or ", ".join(b.get("names", [""])[0] for b in comp.get("broadcasts") or [] if b.get("names"))
+
+            games.append({
+                "id": f"{ev_id}:{comp_id}",
+                "event_id": ev_id,
+                "comp_id": comp_id,
+                "event_name": ev_name,
+                "league": "ufc",
+                "is_combat": True,
+                "weight_class": wc,
+                "is_title": is_title,
+                "start": parse_iso(comp.get("date") or ev.get("date")),
+                "week": None,
+                "state": state,
+                "status_name": st_type.get("name") or "STATUS_SCHEDULED",
+                "detail": st_type.get("detail") or "",
+                "short": st_type.get("shortDetail") or "",
+                "clock": clock,
+                "period": period,
+                "is_halftime": False,
+                "is_overtime": False,
+                "away": away_f,
+                "home": home_f,
+                "odds": (comp.get("odds") or [{}])[0] if comp.get("odds") else {},
+                "situation": None,
+                "upset": None,
+                "venue": venue,
+                "tv": tv,
+                "method": "",
+            })
+    return games
+
+
+def parse_ufc_board(date=None, allow_upcoming=True):
+    url = "%s/mma/ufc/scoreboard?limit=250" % SITE
+    if date is not None:
+        date_str = date.strftime("%Y%m%d")
+        try:
+            data = fetch_json(f"{url}&dates={date_str}")
+            events = data.get("events") or []
+            if events or not allow_upcoming:
+                return _unpack_ufc_events(events)
+        except Exception:
+            pass
+    try:
+        data = fetch_json(url)
+        return _unpack_ufc_events(data.get("events") or [])
+    except Exception:
+        return []
+
+
+def parse_box_board(date=None, allow_upcoming=True):
+    games = []
+    try:
+        when = "today" if (date == today() and not allow_upcoming) else "weekend"
+        url = f"{BOXERBOOK_BASE}/schedule?when={when}"
+        data = fetch_json(url)
+        for ev in data.get("events") or []:
+            ev_id = str(ev.get("id"))
+            venue = ", ".join(x for x in (ev.get("venue"), ev.get("city"), ev.get("country")) if x)
+            ev_bouts = ev.get("bouts") or []
+            for idx, b in enumerate(ev_bouts):
+                title_text = b.get("title_text") or ""
+                is_title = bool(title_text)
+                is_main = (idx == len(ev_bouts) - 1 and (b.get("scheduled_rounds") or 0) >= 10)
+                # Filter: only include title fights and big events (championship fights / 10+ round main events)
+                if not (is_title or is_main):
+                    continue
+                bid = str(b.get("id") or idx)
+                fa, fb = b.get("a") or {}, b.get("b") or {}
+                wc = b.get("division") or "Bout"
+                st = b.get("status") or "scheduled"
+                state = "post" if st in ("completed", "result") else ("in" if st == "live" else "pre")
+                winner = b.get("winner")
+
+                def _parse_boxer(bx, is_a):
+                    w = (winner == "a") if is_a else (winner == "b")
+                    name = bx.get("name") or "?"
+                    return {
+                        "id": str(bx.get("id") or ""),
+                        "abbr": name.split()[-1] if name != "?" else "?",
+                        "name": name,
+                        "full": name,
+                        "color": "0047AB" if is_a else "CC0000",
+                        "alt_color": "444444",
+                        "score": "✔" if w else ("" if state == "pre" else "-"),
+                        "score_int": 1 if w else 0,
+                        "record": bx.get("record") or "",
+                        "rank": None,
+                        "winner": w,
+                        "logo": "",
+                        "conf_id": "",
+                    }
+
+                games.append({
+                    "id": f"box:{ev_id}:{bid}",
+                    "event_id": ev_id,
+                    "comp_id": bid,
+                    "event_name": title_text or f"Boxing: {fa.get('name')} vs {fb.get('name')}",
+                    "league": "box",
+                    "is_combat": True,
+                    "weight_class": wc,
+                    "is_title": bool(title_text),
+                    "start": parse_iso(b.get("date")),
+                    "week": None,
+                    "state": state,
+                    "status_name": "STATUS_SCHEDULED" if state == "pre" else "STATUS_FINAL",
+                    "detail": b.get("method") or "",
+                    "short": b.get("method") or "",
+                    "clock": "",
+                    "period": b.get("round") or 0,
+                    "is_halftime": False,
+                    "is_overtime": False,
+                    "away": _parse_boxer(fa, True),
+                    "home": _parse_boxer(fb, False),
+                    "odds": {},
+                    "situation": None,
+                    "upset": None,
+                    "venue": venue,
+                    "tv": ", ".join(br.get("platform", "") for br in ev.get("broadcasts") or [] if br.get("platform")),
+                    "method": b.get("method") or "",
+                })
+    except Exception:
+        pass
+
+    if allow_upcoming:
+        try:
+            r_url = f"{BOXERBOOK_BASE}/results?days=7"
+            r_data = fetch_json(r_url)
+            for b in r_data.get("bouts") or []:
+                title_text = b.get("title_text") or ""
+                is_title = bool(title_text)
+                is_championship = (b.get("round") or 0) >= 10 or (b.get("scheduled_rounds") or 0) >= 10
+                # Filter: only include title fights and big championship bouts
+                if not (is_title or is_championship):
+                    continue
+                if len(games) >= 20:
+                    break
+                bid = str(b.get("id"))
+                ev_id = str(b.get("event_id") or "0")
+                fa, fb = b.get("a") or {}, b.get("b") or {}
+                wc = b.get("division") or "Bout"
+                winner = b.get("winner")
+                method = b.get("method") or "Final"
+                rnd = b.get("round")
+
+                def _parse_boxer_res(bx, is_a):
+                    w = (winner == "a") if is_a else (winner == "b")
+                    name = bx.get("name") or "?"
+                    return {
+                        "id": str(bx.get("id") or ""),
+                        "abbr": name.split()[-1] if name != "?" else "?",
+                        "name": name,
+                        "full": name,
+                        "color": "0047AB" if is_a else "CC0000",
+                        "alt_color": "444444",
+                        "score": "✔" if w else "-",
+                        "score_int": 1 if w else 0,
+                        "record": bx.get("record") or "",
+                        "rank": None,
+                        "winner": w,
+                        "logo": "",
+                        "conf_id": "",
+                    }
+
+                games.append({
+                    "id": f"box:{ev_id}:{bid}",
+                    "event_id": ev_id,
+                    "comp_id": bid,
+                    "event_name": title_text or f"Boxing: {fa.get('name')} vs {fb.get('name')}",
+                    "league": "box",
+                    "is_combat": True,
+                    "weight_class": wc,
+                    "is_title": bool(title_text),
+                    "start": parse_iso(b.get("date")),
+                    "week": None,
+                    "state": "post",
+                    "status_name": "STATUS_FINAL",
+                    "detail": f"{method} R{rnd}" if rnd else method,
+                    "short": f"{method} R{rnd}" if rnd else method,
+                    "clock": "",
+                    "period": rnd or 0,
+                    "is_halftime": False,
+                    "is_overtime": False,
+                    "away": _parse_boxer_res(fa, True),
+                    "home": _parse_boxer_res(fb, False),
+                    "odds": {},
+                    "situation": None,
+                    "upset": None,
+                    "venue": "",
+                    "tv": "",
+                    "method": method,
+                })
+        except Exception:
+            pass
+
+    return games
+
+
+def parse_board(lg, date, week=None, allow_upcoming=True):
+    if lg["key"] == "ufc":
+        return parse_ufc_board(date, allow_upcoming=allow_upcoming)
+    if lg["key"] == "box":
+        return parse_box_board(date, allow_upcoming=allow_upcoming)
     data = fetch_json(scoreboard_url(lg, date, week=week))
     games = []
     board_week = dig(data, "week", "number")
@@ -519,7 +933,7 @@ def parse_all_boards(date):
 
     def _fetch(lg):
         try:
-            return parse_board(lg, date)
+            return parse_board(lg, date, allow_upcoming=False)
         except Exception:
             return []
 
@@ -532,6 +946,34 @@ def parse_all_boards(date):
 
 
 def parse_rankings(lg):
+    if lg["key"] == "ufc":
+        try:
+            data = fetch_json("%s/mma/ufc/rankings" % SITE)
+            polls = []
+            for poll in data.get("rankings") or []:
+                name = poll.get("name") or ""
+                ranks = []
+                for r in poll.get("ranks") or []:
+                    ath = r.get("athlete") or {}
+                    pname = ath.get("displayName") or ath.get("fullName") or "?"
+                    if r.get("hasAccolade"):
+                        pname += " (C)"
+                    ranks.append({
+                        "rank": r.get("current") or 0,
+                        "prev": r.get("previous") or 0,
+                        "team": pname,
+                        "abbr": ath.get("shortname") or pname[:8],
+                        "color": (ath.get("color") or "CC0000").lstrip("#"),
+                        "record": r.get("recordSummary") or "",
+                        "points": r.get("defenses") or 0,
+                        "first": 1 if r.get("hasAccolade") else 0,
+                        "trend": r.get("trend") or "-",
+                    })
+                if ranks:
+                    polls.append({"name": name, "type": "ufc", "week": None, "ranks": ranks})
+            return polls
+        except Exception:
+            return []
     data = fetch_json("%s/%s/rankings" % (SITE, lg["path"]))
     polls = []
     week_num = dig(data, "latestWeek", "number")
@@ -566,7 +1008,8 @@ def parse_rankings(lg):
 
 
 def parse_standings(lg):
-    data = fetch_json("%s/%s/standings" % (CORE, lg["path"]))
+    query = "?level=3" if lg.get("key") == "nhl" else ""
+    data = fetch_json("%s/%s/standings%s" % (CORE, lg["path"], query))
     groups = []
     seen = set()
 
@@ -590,9 +1033,28 @@ def parse_standings(lg):
                         stats[nm] = val
                     if tp and tp not in stats:
                         stats[tp] = val
+                short = team.get("shortDisplayName") or ""
+                loc = team.get("location") or ""
+                full = team.get("displayName") or ""
+                name_prop = team.get("name") or ""
+                abbr = team.get("abbreviation") or ""
+
+                team_name = short
+                if not team_name or (abbr and team_name.strip().upper() == abbr.strip().upper()):
+                    if loc and loc.strip().upper() != abbr.strip().upper():
+                        team_name = loc
+                    elif full and full.strip().upper() != abbr.strip().upper():
+                        team_name = full
+                    elif name_prop:
+                        team_name = name_prop
+                    else:
+                        team_name = short or loc or full or abbr or "?"
+
                 rows.append({
-                    "team": team.get("shortDisplayName") or team.get("location") or team.get("name") or "?",
-                    "abbr": team.get("abbreviation") or "",
+                    "id": str(team.get("id") or ""),
+                    "team": team_name,
+                    "full": full or team_name or "?",
+                    "abbr": abbr,
                     "color": (team.get("color") or "444444").lstrip("#"),
                     "stats": stats,
                 })
@@ -657,7 +1119,195 @@ STANDING_COLS = {
 }
 
 
+def ordinal(n):
+    if 11 <= (n % 100) <= 13:
+        return f"{n}th"
+    suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
+def shorten_group(name):
+    replacements = {
+        "Eastern Conference": "East",
+        "Western Conference": "West",
+        "American Football Conference": "AFC",
+        "National Football Conference": "NFC",
+        "American League": "AL",
+        "National League": "NL",
+        "Atlantic Coast Conference": "ACC",
+        "Big Ten Conference": "Big Ten",
+        "Big 12 Conference": "Big 12",
+        "Southeastern Conference": "SEC",
+        "Pac-12 Conference": "Pac-12",
+        "Mountain West Conference": "MWC",
+        "Mid-American Conference": "MAC",
+        "Conference USA": "C-USA",
+        "American Athletic Conference": "AAC",
+        "American Conference": "AAC",
+        "FBS Independents": "Independents",
+        "Sun Belt Conference": "Sun Belt",
+        "Big East Conference": "Big East",
+        "West Coast Conference": "WCC",
+        "Metropolitan Division": "Metro",
+        "Atlantic Division": "Atlantic",
+        "Central Division": "Central",
+        "Pacific Division": "Pacific",
+    }
+    for k, v in replacements.items():
+        if name == k:
+            return v
+    if name.endswith(" Conference"):
+        return name[:-11]
+    if name.endswith(" Division"):
+        return name[:-9]
+    return name
+
+
+def get_cutoff_lines(league_key, group_name, row_count):
+    """Return {rank: 'Label'} mapping of postseason qualification cutoffs."""
+    cutoffs = {}
+    lg = (league_key or "").lower()
+    name = (group_name or "").lower()
+
+    if lg == "nhl":
+        if "division" in name or row_count == 8:
+            cutoffs[3] = "Playoff Cutoff (Top 3)"
+        elif "conference" in name or row_count == 16:
+            cutoffs[8] = "Playoff Cutoff (Top 8)"
+    elif lg == "nba":
+        if "conference" in name or row_count == 15:
+            cutoffs[6] = "Playoff Cutoff (Top 6)"
+            cutoffs[10] = "Play-In Cutoff (Top 10)"
+    elif lg == "nfl":
+        if "conference" in name or row_count == 16:
+            cutoffs[7] = "Playoff Cutoff (Top 7)"
+        elif "division" in name or row_count == 4:
+            cutoffs[1] = "Division Winner"
+    elif lg == "mlb":
+        if "league" in name or row_count == 15:
+            cutoffs[6] = "Playoff Cutoff (Top 6)"
+        elif "division" in name or row_count == 5:
+            cutoffs[1] = "Division Winner"
+    elif lg == "mls":
+        if row_count >= 10 or "conference" in name:
+            cutoffs[7] = "Playoff Cutoff (Top 7)"
+            cutoffs[9] = "Wild Card Cutoff (Top 9)"
+    elif lg == "wnba":
+        if row_count >= 10:
+            cutoffs[8] = "Playoff Cutoff (Top 8)"
+
+    return cutoffs
+
+
+def get_team_standing(groups, side, lg_key):
+    if not groups or not side:
+        return None
+    side_id = str(side.get("id") or "")
+    side_abbr = (side.get("abbr") or "").strip().upper()
+    side_name = (side.get("name") or "").strip().lower()
+    side_full = (side.get("full") or "").strip().lower()
+
+    for g in groups:
+        grp_name = g.get("name") or ""
+        grp_short = shorten_group(grp_name)
+        rows = g.get("rows") or []
+        for idx, row in enumerate(rows, 1):
+            r_id = str(row.get("id") or "")
+            r_abbr = (row.get("abbr") or "").strip().upper()
+            r_team = (row.get("team") or "").strip().lower()
+            r_full = (row.get("full") or "").strip().lower()
+
+            matched = False
+            if side_id and r_id and side_id == r_id:
+                matched = True
+            elif side_abbr and r_abbr and side_abbr == r_abbr:
+                matched = True
+            elif side_full and r_full and side_full == r_full:
+                matched = True
+            elif side_name and r_team and side_name == r_team:
+                matched = True
+
+            if matched:
+                st = row.get("stats") or {}
+                ord_rank = ordinal(idx)
+                gb = st.get("gamesBehind") or st.get("gamesbehind") or "-"
+                gb_str = "- GB" if gb == "-" else f"{gb} GB"
+                ovr = st.get("overall") or st.get("total") or side.get("record") or ""
+                conf_rec = st.get("vs. Conf.") or st.get("vsconf")
+                streak = st.get("streak") or ""
+                seed = st.get("playoffSeed") or st.get("playoffseed")
+
+                if lg_key in ("cfb", "cbb"):
+                    if conf_rec and conf_rec != "0-0":
+                        summary = f"{ord_rank} in {grp_short} ({conf_rec} Conf, {ovr} Ovr)"
+                        badge = f"{ord_rank} {grp_short} ({conf_rec})"
+                    else:
+                        summary = f"{ord_rank} in {grp_short} ({ovr})"
+                        badge = f"{ord_rank} {grp_short}"
+                elif lg_key in ("nba", "nhl", "mlb", "nfl"):
+                    pts = st.get("points")
+                    pts_str = f", {pts} PTS" if (lg_key == "nhl" and pts and "PTS" not in str(ovr)) else ""
+                    summary = f"{ord_rank} in {grp_short} ({ovr}{pts_str}, {gb_str})"
+                    badge = f"{ord_rank} {grp_short} ({gb_str})"
+                else:
+                    summary = f"{ord_rank} in {grp_short} ({ovr})"
+                    badge = f"{ord_rank} {grp_short}"
+
+                return {
+                    "rank": idx,
+                    "rank_str": ord_rank,
+                    "group": grp_name,
+                    "group_short": grp_short,
+                    "summary": summary,
+                    "badge": badge,
+                    "stats": st,
+                    "streak": streak,
+                    "seed": seed,
+                }
+    return None
+
+
+def parse_combat_detail(lg, event_id):
+    ev_id, comp_id = (event_id.split(":", 1) if ":" in event_id else (event_id, ""))
+    if lg["key"] == "ufc" and comp_id:
+        try:
+            st_url = f"{CORE}/mma/leagues/ufc/events/{ev_id}/competitions/{comp_id}/status"
+            st_data = fetch_json(st_url)
+            res = st_data.get("result") or {}
+            method = res.get("displayName") or res.get("shortDisplayName") or ""
+            desc = res.get("description") or ""
+            target = (res.get("target") or {}).get("description") or ""
+            round_num = st_data.get("period")
+            clock = st_data.get("displayClock") or ""
+            return {
+                "method": method,
+                "desc": desc,
+                "target": target,
+                "round": round_num,
+                "clock": clock,
+                "linescores": {"away": [], "home": []},
+                "leaders": [],
+                "plays": [],
+                "stats": [],
+            }
+        except Exception:
+            pass
+    return {
+        "method": "",
+        "desc": "",
+        "target": "",
+        "round": 0,
+        "clock": "",
+        "linescores": {"away": [], "home": []},
+        "leaders": [],
+        "plays": [],
+        "stats": [],
+    }
+
+
 def parse_detail(lg, event_id):
+    if lg.get("combat"):
+        return parse_combat_detail(lg, event_id)
     url = "%s/%s/summary?event=%s" % (SITE, lg["path"], event_id)
     data = fetch_json(url)
     # 1. Scoring plays: check scoringPlays (CFB/NFL) then plays with scoringPlay=True (NBA/NHL/CBB/MLB)
@@ -756,7 +1406,10 @@ def parse_detail(lg, event_id):
 
 
 def parse_news(lg):
-    url = "%s/%s/news?limit=25" % (SITE, lg["path"])
+    if lg["key"] == "all":
+        return parse_all_news()
+    path = "mma/ufc" if lg["key"] in ("ufc", "box") else lg["path"]
+    url = "%s/%s/news?limit=25" % (SITE, path)
     data = fetch_json(url)
     items = []
     for art in data.get("articles") or []:
@@ -785,8 +1438,37 @@ def parse_news(lg):
             "web_url": web_url,
             "story_url": story_url,
             "teams": teams[:4],
+            "league": lg["name"],
         })
     return items
+
+
+def parse_all_news():
+    """Fetch and aggregate top news from all sports concurrently."""
+    all_items = []
+
+    def _fetch(lg):
+        try:
+            return parse_news(lg)
+        except Exception:
+            return []
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(SPORT_LEAGUES)) as ex:
+        for res in ex.map(_fetch, SPORT_LEAGUES):
+            if res:
+                all_items.extend(res)
+
+    seen = set()
+    deduped = []
+    for it in all_items:
+        hid = it.get("id") or it.get("headline")
+        if hid and hid not in seen:
+            seen.add(hid)
+            deduped.append(it)
+
+    epoch_min = dt.datetime.min.replace(tzinfo=dt.timezone.utc)
+    deduped.sort(key=lambda x: x.get("published") or epoch_min, reverse=True)
+    return deduped[:50]
 
 
 def strip_html(raw_html):
@@ -1290,6 +1972,17 @@ class App:
 
     def status_text(self, game):
         g = self.g()
+        if game.get("is_combat"):
+            if game["state"] == "in":
+                clk = f" {game['clock']}" if game.get("clock") else ""
+                return "%s R%s%s" % (g["live"], game.get("period", 1), clk)
+            if game["state"] == "post":
+                base = game.get("method") or game.get("short") or "Final"
+                clk = f" R{game['period']} {game['clock']}".rstrip() if game.get("period") else ""
+                return "%s %s%s" % (g["final"], base, clk)
+            if game.get("status_name") not in ("STATUS_SCHEDULED", None, ""):
+                return "%s %s" % (g["pregame"], game["short"] or game["detail"])
+            return "%s %s" % (g["pregame"], self.kickoff_str(game["start"]))
         if game["state"] == "in":
             if game.get("is_halftime"):
                 return "%s Halftime" % g["halftime"]
@@ -1307,6 +2000,13 @@ class App:
         return "%s %s" % (g["pregame"], self.kickoff_str(game["start"]))
 
     def extra_text(self, game):
+        if game.get("is_combat"):
+            if game["state"] == "pre":
+                sp = spread_text(game["odds"])
+                return sp if sp else (game.get("tv") or "").split(",")[0]
+            if game["state"] == "post":
+                return (game.get("venue") or "").split(",")[0]
+            return ""
         if game["state"] == "pre":
             sp = spread_text(game["odds"])
             return sp if sp else (game.get("tv") or "").split(",")[0]
@@ -1330,6 +2030,9 @@ class App:
         if self.group_filter and self.group_filter != "all":
             if self.league_key in ("cfb", "cbb"):
                 rows = [g for g in rows if g["away"].get("conf_id") == self.group_filter or g["home"].get("conf_id") == self.group_filter]
+            elif self.league_key in ("ufc", "box"):
+                target_wc = self.group_filter.replace("_", " ").lower()
+                rows = [g for g in rows if target_wc in (g.get("weight_class") or "").lower()]
             elif self.league_key != "all":
                 mapping = PRO_TEAM_GROUPS.get(self.league_key, {})
                 rows = [
@@ -1338,6 +2041,8 @@ class App:
                 ]
         if self.filter == "live":
             rows = [g for g in rows if g["state"] == "in"]
+        elif self.filter in ("final", "completed"):
+            rows = [g for g in rows if g["state"] == "post"]
         elif self.filter == "top25":
             rows = [g for g in rows if g["away"]["rank"] or g["home"]["rank"]]
         elif self.filter == "fav":
@@ -1558,7 +2263,9 @@ class App:
         self.clear_line(y, self.attr("panel"))
         if self.view in ("detail", "extra", "news", "help"):
             items = [("esc", "Back"), ("c", "Copy"), ("q", "Quit")]
-            if self.view == "extra":
+            if self.view == "detail":
+                items.insert(2, ("T", "Standings"))
+            elif self.view == "extra":
                 items.insert(1, ("←/→", "Switch Group/Poll"))
             elif self.view == "news":
                 items.insert(1, ("⏎", "Read"))
@@ -1566,21 +2273,25 @@ class App:
         elif self.view == "group_picker":
             items = [("esc", "Cancel"), ("⏎", "Select"), ("q", "Quit")]
         else:
-            is_college = self.league_key in ("cfb", "cbb")
+            if self.league_key in ("ufc", "box"):
+                group_lbl = "Weight"
+            else:
+                is_college = self.league_key in ("cfb", "cbb")
+                group_lbl = "Conf" if is_college else "Div"
             items = [
                 ("q", "Quit"),
                 ("?", "Help"),
                 ("⏎", "Detail"),
                 ("v", "Layout"),
                 ("l", "Filter"),
-                ("o", "Conf" if is_college else "Div"),
+                ("o", group_lbl),
                 ("R", "Rankings"),
                 ("T", "Standings"),
                 ("N", "News"),
                 ("c", "Copy"),
             ]
             if not self.only:
-                items.append(("1-6", "League"))
+                items.append(("1-%d" % len(LEAGUES), "League"))
         segs = [(" ", self.attr("panel"))]
         for k, lbl in items:
             segs.append((k, self.attr("key")))
@@ -1628,7 +2339,9 @@ class App:
             elif gm["state"] == "pre":
                 sp = spread_text(gm["odds"])
                 sp_str = ("  ·  " + sp) if sp else ""
-                events.append((0 if fav else 5, fav, "dim", "%s %s%s  %s%s" % (g["pregame"], lg_pfx, matchup, self.kickoff_str(gm["start"]), sp_str)))
+                riv = gm.get("rivalry")
+                riv_tag = ("  ·  %s %s" % (g["rivalry"], riv)) if riv else ""
+                events.append((0 if fav else (3 if riv else 5), fav, "accent" if riv else "dim", "%s %s%s  %s%s%s" % (g["pregame"], lg_pfx, matchup, self.kickoff_str(gm["start"]), sp_str, riv_tag)))
 
         events.sort(key=lambda x: x[0])
         avail = height - 1
@@ -1749,6 +2462,38 @@ class App:
         star = g["star"] if fav else ""
         rank_num = side.get("rank")
 
+        if game.get("is_combat"):
+            icon = f"{star} " if star else ""
+            rk_str = f"#{rank_num} " if rank_num else ""
+            name = side.get("name") or side.get("abbr") or "?"
+            rec = f" {side['record'][:7]}" if side.get("record") else ""
+            if cell_w >= 30:
+                prefix = team_row_prefix("", star, rank_num)
+                max_nm_w = max(6, cell_w - 8 - len(rec) - 8)
+                nm_disp = clip_to_width(name, max_nm_w)
+                left = prefix + f"{nm_disp:<{max_nm_w}}{rec}"
+                if game["state"] == "post":
+                    sc_fmt = f"{g['fresh']} WIN" if side.get("winner") else "    - "
+                elif game["state"] == "in":
+                    sc_fmt = " LIVE "
+                else:
+                    sc_fmt = "      "
+                pad = max(1, cell_w - str_width(left) - str_width(sc_fmt))
+                return left + (" " * pad) + sc_fmt
+            else:
+                max_nm_w = max(5, cell_w - len(rk_str) - (2 if star else 0) - len(rec) - 6)
+                nm_disp = clip_to_width(name, max_nm_w)
+                left = "%s%s%-*s%s" % (
+                    icon,
+                    rk_str,
+                    max_nm_w,
+                    nm_disp,
+                    rec,
+                )
+                sc_str = "WIN" if side.get("winner") else ""
+                pad = max(1, cell_w - str_width(left) - str_width(sc_str))
+                return left + (" " * pad) + sc_str
+
         # In card mode (cell_w >= 30), exact aligned block matching cfbtui:
         # Every team abbr starts at exact visual column 8
         if cell_w >= 30:
@@ -1806,15 +2551,19 @@ class App:
         sit = game.get("situation")
 
         lg_tag = ("%-4s " % game["league"].upper()) if self.league_key == "all" else ""
+        sep = " vs " if game.get("is_combat") else " @ "
         segs = [
             (cursor + " " + lg_tag, self.attr("focus") if selected else self.attr("base")),
             (aw_txt, aw_attr),
-            (" @ ", self.attr("focus") if selected else self.attr("dim")),
+            (sep, self.attr("focus") if selected else self.attr("dim")),
             (hm_txt, hm_attr),
             ("   " + status, self.attr("live") if live else (self.attr("focus") if selected else self.attr("base"))),
         ]
         if extra:
             segs.append(("  " + extra, self.attr("dim")))
+        if game.get("rivalry"):
+            riv_lbl = ("  %s %s" % (g["rivalry"], game["rivalry"].upper())) if width >= 105 else ("  %s RIVALRY" % g["rivalry"])
+            segs.append((riv_lbl, self.attr("accent")))
         if up:
             lbl = ("  %s UPSET" % g["upset"]) if up["confirmed"] else ("  %s UPSET WATCH" % g["upset_watch"])
             segs.append((lbl, self.attr("accent")))
@@ -1892,20 +2641,34 @@ class App:
         titles = []
         if self.league_key == "all":
             titles.append(game["league"].upper())
+        if game.get("is_combat"):
+            wc = game.get("weight_class") or ""
+            if wc:
+                titles.append(wc.upper())
+            if game.get("is_title"):
+                titles.append("🏆 TITLE")
         if up:
             titles.append(("%s UPSET" % g["upset"]) if up["confirmed"] else ("%s UPSET WATCH" % g["upset_watch"]))
         if red_zone:
             titles.append("%s RED ZONE" % g["red_zone"])
+        if game.get("rivalry"):
+            riv_name = game["rivalry"].upper()
+            if cw >= 40 and len(riv_name) <= 22:
+                titles.append("%s %s" % (g["rivalry"], riv_name))
+            else:
+                titles.append("%s RIVALRY" % g["rivalry"])
         if selected:
             titles.append("▸")
         title_str = " ".join(titles)
 
-        heavy = bool(selected or up or red_zone)
+        heavy = bool(selected or up or red_zone or game.get("rivalry"))
         if selected:
             border_attr = self.attr("focus")
         elif red_zone:
             border_attr = self.attr("live")
         elif up:
+            border_attr = self.attr("accent")
+        elif game.get("rivalry"):
             border_attr = self.attr("accent")
         elif live:
             border_attr = self.attr("good")
@@ -1915,8 +2678,8 @@ class App:
         self.draw_box(y, x, 5, cw, border_attr, title=title_str, heavy=heavy)
 
         # Away and Home full-bleed team color rows
-        aw_lead = game["state"] != "pre" and away["score_int"] > home["score_int"]
-        hm_lead = game["state"] != "pre" and home["score_int"] > away["score_int"]
+        aw_lead = game["state"] != "pre" and away.get("score_int", 0) > home.get("score_int", 0)
+        hm_lead = game["state"] != "pre" and home.get("score_int", 0) > away.get("score_int", 0)
         for i, (side, is_lead, is_trail) in enumerate((
             (away, aw_lead, final and hm_lead),
             (home, hm_lead, final and aw_lead),
@@ -2049,30 +2812,53 @@ class App:
             box_w = min(width - 4, 74)
 
         avail_rows = max(1, height - 3)
-        max_rows = max(len(g["rows"]) for g in vis_groups)
+
+        def build_group_items(grp):
+            cutoffs = get_cutoff_lines(self.league_key, grp["name"], len(grp["rows"]))
+            items = []
+            for ri, row in enumerate(grp["rows"], 1):
+                items.append(("row", ri, row))
+                if ri in cutoffs:
+                    items.append(("cutoff", ri, cutoffs[ri]))
+            return items
+
+        vis_items = [build_group_items(g) for g in vis_groups]
+        max_rows = max(len(it) for it in vis_items)
         self.extra_scroll = max(0, min(self.extra_scroll, max(0, max_rows - avail_rows)))
 
         cols_spec = STANDING_COLS.get(self.league_key, [])
-        for idx, grp in enumerate(vis_groups):
+        for idx, (grp, g_items) in enumerate(zip(vis_groups, vis_items)):
             bx = 2 + idx * (box_w + 2)
             cols = [(k, h) for k, h in cols_spec if any(r["stats"].get(k) not in (None, "") for r in grp["rows"])]
             if not cols:
                 cols = cols_spec[:4]
             stat_w = 7 * len(cols)
             team_w = max(16, box_w - stat_w - 8)
-            box_h = min(height, len(grp["rows"]) - self.extra_scroll + 3)
+            box_h = min(height, len(g_items) - self.extra_scroll + 3)
             self.draw_box(y_box, bx, max(4, box_h), box_w, self.attr("dim"), title=grp["name"])
 
             hdr = " %3s %-*s" % ("#", team_w, "Team") + "".join("%7s" % h for _, h in cols)
             self.put(y_box + 1, bx + 1, hdr[:box_w - 2], self.attr("section"))
 
-            rows = grp["rows"][self.extra_scroll:self.extra_scroll + avail_rows]
-            for ri, row in enumerate(rows):
+            items_slice = g_items[self.extra_scroll:self.extra_scroll + avail_rows]
+            for ri, item in enumerate(items_slice):
                 ry = y_box + 2 + ri
-                rank_num = self.extra_scroll + ri + 1
+                if item[0] == "cutoff":
+                    lbl = "── %s " % item[2]
+                    div_line = (" " + lbl).ljust(box_w - 2, "─")
+                    self.put(ry, bx + 1, div_line[:box_w - 2], self.attr("dim"))
+                    continue
+                _, rank_num, row = item
                 t_bar = self.team_bar_attr(row["color"], bold=True)
                 star = self.g()["star"] if ("%s:%s" % (self.league_key, row["abbr"]) in self.favs) else " "
-                t_label = "%s%-4s %s" % (star, row["abbr"][:4], row["team"])
+                t_name = row["team"]
+                if t_name.upper().startswith(row["abbr"].upper() + " "):
+                    t_disp = t_name
+                elif t_name.upper() == row["abbr"].upper():
+                    t_disp = "%-4s %s" % (row["abbr"][:4], row.get("full") or t_name)
+                else:
+                    t_disp = "%-4s %s" % (row["abbr"][:4], t_name)
+                t_label = "%s%s" % (star, t_disp)
                 segs = [
                     (" %2d " % rank_num, self.attr("dim")),
                     (" %-*s " % (team_w - 2, t_label[:team_w - 2]), t_bar),
@@ -2097,22 +2883,44 @@ class App:
         final = game["state"] == "post"
         aw_lead = game["state"] != "pre" and away["score_int"] > home["score_int"]
         hm_lead = game["state"] != "pre" and home["score_int"] > away["score_int"]
+        is_combat = game.get("is_combat")
+
+        # Standings data lookup
+        standings_data = None
+        if not is_combat:
+            s_key = "stand:%s" % game["league"]
+            standings_data = self.ensure(s_key, lambda: parse_standings(lg), 300)
+        away_st = get_team_standing(standings_data, away, game["league"]) if standings_data else None
+        home_st = get_team_standing(standings_data, home, game["league"]) if standings_data else None
 
         # 1. Top Full-Bleed Team Banners (matching detail.png)
-        banner_w = max(32, max(len(away["full"]), len(home["full"])) + 18)
+        aw_badge = f"  [{away_st['badge']}]" if (away_st and away_st.get("badge")) else ""
+        hm_badge = f"  [{home_st['badge']}]" if (home_st and home_st.get("badge")) else ""
+        aw_len = len(away["full"]) + len(away.get("record", "")) + len(aw_badge)
+        hm_len = len(home["full"]) + len(home.get("record", "")) + len(hm_badge)
+        banner_w = min(width - 4, max(36, max(aw_len, hm_len) + 18))
         live = game["state"] == "in"
         sit = game.get("situation") if live else None
-        for i, (side, prefix, is_lead) in enumerate(((away, "", aw_lead), (home, "@ ", hm_lead))):
+        for i, (side, prefix, is_lead, side_st) in enumerate(((away, ("[BLU] " if is_combat else ""), aw_lead, away_st), (home, ("[RED] " if is_combat else "@ "), hm_lead, home_st))):
             rk = ("#%d " % side["rank"]) if side["rank"] else ""
-            left = " %s%s%s  %s" % (prefix, rk, side["full"], side["record"])
+            badge = f"  [{side_st['badge']}]" if (side_st and side_st.get("badge")) else ""
+            left = " %s%s%s  %s%s" % (prefix, rk, side["full"], side["record"], badge)
             t_str = ""
             if live and sit:
                 rem = sit.get("away_timeouts" if i == 0 else "home_timeouts")
                 t_str = timeouts_str(g, rem, game.get("league", "cfb"))
-            sc = str(side["score"]) if game["state"] != "pre" else ""
+            if is_combat:
+                sc = ("✔ WIN" if side.get("winner") else ("- " if final else ""))
+            else:
+                sc = str(side["score"]) if game["state"] != "pre" else ""
             sc_part = f"{t_str}  {sc}" if t_str else sc
             pad = max(2, banner_w - str_width(left) - str_width(sc_part) - 1)
             line = left + (" " * pad) + sc_part + " "
+            if str_width(line) > banner_w:
+                avail_left = max(10, banner_w - str_width(sc_part) - 3)
+                left_clipped = clip_to_width(left, avail_left)
+                pad = max(1, banner_w - str_width(left_clipped) - str_width(sc_part) - 1)
+                line = left_clipped + (" " * pad) + sc_part + " "
             self.put(top + i, 2, line, self.team_bar_attr(side["color"], bold=is_lead, dim=(final and not is_lead)))
 
         y = top + 2
@@ -2125,6 +2933,10 @@ class App:
         if info_str:
             self.put(y, 2, info_str[:width - 4], self.attr("dim"))
             y += 1
+        if game.get("rivalry"):
+            riv_str = "%s Rivalry Game  ·  %s" % (g["rivalry"], game["rivalry"])
+            self.put(y, 2, riv_str[:width - 4], self.attr("accent") | curses.A_BOLD)
+            y += 1
 
         if data is None:
             self.put(y + 1, 2, "%s Loading game summary..." % g["loading"], self.attr("dim"))
@@ -2132,6 +2944,43 @@ class App:
 
         # Build virtual scrollable lines for the rest of the detail screen
         vlines = []  # list of list-of-(text, attr) segments
+
+        if is_combat:
+            vlines.append([])
+            vlines.append([("Bout Outcome", self.attr("base") | curses.A_BOLD | curses.A_UNDERLINE)])
+            meth = data.get("method") or game.get("method") or "Scheduled"
+            desc = data.get("desc") or ""
+            tgt = data.get("target") or ""
+            rnd = data.get("round") or game.get("period")
+            clk = data.get("clock") or game.get("clock")
+            res_str = f"Result: {meth}"
+            if desc:
+                res_str += f" ({desc}" + (f" to {tgt})" if tgt else ")")
+            if rnd:
+                res_str += f" · Round {rnd}" + (f" at {clk}" if clk else "")
+            vlines.append([(res_str, self.attr("focus") if final else self.attr("base"))])
+
+            vlines.append([])
+            vlines.append([("Tale of the Tape", self.attr("base") | curses.A_BOLD | curses.A_UNDERLINE)])
+            vlines.append([
+                ("%-22s" % (away["full"][:21]), self.team_fg_attr(away["color"], bold=True)),
+                ("  vs  ", self.attr("dim")),
+                ("%-22s" % (home["full"][:21]), self.team_fg_attr(home["color"], bold=True)),
+            ])
+            vlines.append([
+                ("%-22s" % ("Record: " + (away.get("record") or "N/A")), self.attr("base")),
+                ("      ", self.attr("dim")),
+                ("%-22s" % ("Record: " + (home.get("record") or "N/A")), self.attr("base")),
+            ])
+            wc = game.get("weight_class") or "Open"
+            title_tag = " [🏆 Title Fight]" if game.get("is_title") else ""
+            vlines.append([("Weight Class: %s%s" % (wc, title_tag), self.attr("accent") if game.get("is_title") else self.attr("base"))])
+
+            avail = max(1, top + height - y)
+            self.detail_scroll = max(0, min(self.detail_scroll, max(0, len(vlines) - avail)))
+            for i in range(self.detail_scroll, min(len(vlines), self.detail_scroll + avail)):
+                self.segment(y + (i - self.detail_scroll), 2, vlines[i], width - 4)
+            return
 
         # 2. Win Probability Bar & Whole-Game Sparkline (detail.png)
         if data.get("winprob"):
@@ -2180,7 +3029,84 @@ class App:
                 row_segs.append(("%5s" % side["score"], self.attr("base") | curses.A_BOLD))
                 vlines.append(row_segs)
 
-        # 4. Leaders
+        # 4. League Standings
+        if away_st or home_st:
+            vlines.append([])
+            vlines.append([("League Standings", self.attr("base") | curses.A_BOLD | curses.A_UNDERLINE)])
+            for side, st in ((away, away_st), (home, home_st)):
+                if st:
+                    team_title = side.get("full") or side.get("name") or side.get("abbr") or ""
+                    avail_title = max(16, min(24, width - 4 - 45))
+                    segs = [
+                        (" %-5s " % side["abbr"][:5], self.team_bar_attr(side["color"], bold=True)),
+                        (" %-*s " % (avail_title, team_title[:avail_title]), self.attr("base") | curses.A_BOLD),
+                        (" " + st["summary"], self.attr("base")),
+                    ]
+                    streak = st.get("streak")
+                    if streak and streak != "-":
+                        segs.append(("  ·  STRK: %s" % streak, self.attr("dim")))
+                    seed = st.get("seed")
+                    if seed and str(seed).isdigit() and 0 < int(seed) <= 16 and game.get("league") in ("nba", "nhl", "mlb", "nfl"):
+                        segs.append(("  (Seed #%s)" % seed, self.attr("accent")))
+                    vlines.append(segs)
+
+            # Full Conference / Division Standings Table for each team
+            if standings_data:
+                away_grp = next((g for g in standings_data if away_st and g["name"] == away_st["group"]), None)
+                home_grp = next((g for g in standings_data if home_st and g["name"] == home_st["group"]), None)
+
+                groups_to_show = []
+                if away_grp and home_grp and away_grp["name"] == home_grp["name"]:
+                    groups_to_show.append((away_grp, [away["abbr"], home["abbr"]], [away.get("id"), home.get("id")]))
+                else:
+                    if away_grp:
+                        groups_to_show.append((away_grp, [away["abbr"]], [away.get("id")]))
+                    if home_grp:
+                        groups_to_show.append((home_grp, [home["abbr"]], [home.get("id")]))
+
+                cols_spec = STANDING_COLS.get(game["league"], [("wins", "W"), ("losses", "L")])
+
+                for grp, h_abbrs, h_ids in groups_to_show:
+                    vlines.append([])
+                    vlines.append([("  %s Standings" % grp["name"], self.attr("base") | curses.A_BOLD)])
+                    cols = [(k, h) for k, h in cols_spec if any(r["stats"].get(k) not in (None, "") for r in grp["rows"])]
+                    if not cols:
+                        cols = cols_spec[:4]
+                    stat_w = 7 * len(cols)
+                    team_w = max(18, min(36, width - 4 - stat_w - 8))
+
+                    hdr = "   %3s  %-*s" % ("#", team_w, "Team") + "".join("%7s" % h for _, h in cols)
+                    vlines.append([(hdr, self.attr("section"))])
+
+                    cutoffs = get_cutoff_lines(game["league"], grp["name"], len(grp["rows"]))
+                    table_w = min(width - 4, 8 + team_w + stat_w)
+
+                    for idx, r in enumerate(grp["rows"], 1):
+                        is_hl = (r["abbr"].upper() in [a.upper() for a in h_abbrs if a]) or (str(r.get("id")) in [str(i) for i in h_ids if i])
+                        marker = "▸" if is_hl else " "
+                        t_bar = self.team_bar_attr(r["color"], bold=is_hl)
+                        t_name = r["team"]
+                        if t_name.upper().startswith(r["abbr"].upper() + " "):
+                            t_disp = t_name
+                        elif t_name.upper() == r["abbr"].upper():
+                            t_disp = "%-4s %s" % (r["abbr"][:4], r.get("full") or t_name)
+                        else:
+                            t_disp = "%-4s %s" % (r["abbr"][:4], t_name)
+                        t_label = "%s%s" % (marker, t_disp)
+                        r_segs = [
+                            ("  %2d " % idx, self.attr("focus") if is_hl else self.attr("dim")),
+                            (" %-*s " % (team_w - 2, t_label[:team_w - 2]), t_bar),
+                        ]
+                        for k, _ in cols:
+                            val = str(r["stats"].get(k) or "-")
+                            r_segs.append(("%7s" % val[:6], self.attr("focus") if is_hl else self.attr("base")))
+                        vlines.append(r_segs)
+                        if idx in cutoffs:
+                            lbl = "── %s " % cutoffs[idx]
+                            div_line = ("   " + lbl).ljust(table_w, "─")
+                            vlines.append([(div_line[:width - 4], self.attr("dim"))])
+
+        # 5. Leaders
         if data.get("leaders"):
             vlines.append([])
             title = "Season leaders" if game["state"] == "pre" else "Game leaders"
@@ -2192,7 +3118,7 @@ class App:
                     segs.append(("%s (%s)   " % (who, val), self.attr("base")))
                 vlines.append(segs)
 
-        # 5. Scoring plays (chronological with running score [AWAY X - HOME Y], matching detail.png)
+        # 6. Scoring plays (chronological with running score [AWAY X - HOME Y], matching detail.png)
         vlines.append([])
         vlines.append([("Scoring plays", self.attr("base") | curses.A_BOLD | curses.A_UNDERLINE)])
         plays = data.get("plays") or []
@@ -2270,11 +3196,14 @@ class App:
             ry = top + 1 + (idx - self.news_scroll) * 2
             sel = idx == self.news_sel
             age = format_age(time.time() - art["published"].timestamp()) + " ago" if art["published"] else ""
+            lg_tag = ("[%s] " % art["league"]) if (self.league_key == "all" and art.get("league")) else ""
             tags = (" [%s]" % ", ".join(art["teams"])) if art["teams"] else ""
             cursor = "▸ " if sel else "  "
+            hl_len = max(10, box_w - 24 - len(lg_tag))
             self.segment(ry, 3, [
                 (cursor, self.attr("focus") if sel else self.attr("base")),
-                (art["headline"][:box_w - 24], self.attr("focus") if sel else (self.attr("base") | curses.A_BOLD)),
+                (lg_tag, self.attr("accent") if not sel else self.attr("focus")),
+                (art["headline"][:hl_len], self.attr("focus") if sel else (self.attr("base") | curses.A_BOLD)),
                 (tags, self.attr("accent")),
                 ("  " + age, self.attr("dim")),
             ], box_w - 4)
@@ -2287,10 +3216,10 @@ class App:
         lines = [
             ("NAVIGATION & VIEWS", "accent"),
             ("  Arrow keys / hjkl   Move between game cards (2D grid or list)", "base"),
-            ("  1-7 / Tab           Switch league (1: ALL, 2: CFB, 3: NFL, 4: NHL, 5: NBA, 6: CBB, 7: MLB)" if not self.only else
+            ("  1-%d / Tab          Switch league (1: ALL, 2: CFB, 3: NFL, 4: NHL, 5: NBA, 6: CBB, 7: MLB, 8: UFC, 9: BOX)" % len(LEAGUES) if not self.only else
              "  Standalone Mode     Locked to %s scoreboard" % self.lg()["name"], "base"),
-            ("  Enter               Open game detail (linescore, win prob, plays)", "base"),
-            ("  R                   Poll rankings (AP / Coaches / CFP side-by-side)", "base"),
+            ("  Enter               Open game detail (linescore, stats, Tale of the Tape)", "base"),
+            ("  R                   Poll & UFC rankings (AP / Coaches / P4P side-by-side)", "base"),
             ("  T                   Conference & Division standings tables", "base"),
             ("  N                   League news feed (Enter to read, o for browser)", "base"),
             ("  [ / ]               Previous / next day", "base"),
@@ -2299,9 +3228,9 @@ class App:
             ("", "base"),
             ("DISPLAY & ACTIONS", "accent"),
             ("  v                   Toggle card grid vs compact list layout", "base"),
-            ("  l                   Filter: all / live / favorites / top25 / upsets", "base"),
-            ("  o                   Filter by conference (CFB/CBB) or division (pro)", "base"),
-            ("  a / h (or ! / @)    Star / unstar away or home team as favorite", "base"),
+            ("  l                   Filter: all / live / final / favorites / top25 / upsets", "base"),
+            ("  o                   Filter by conference / division / weight class", "base"),
+            ("  a / h (or ! / @)    Star / unstar away/blue or home/red corner as favorite", "base"),
             ("  c / C               Copy selected game (c) or whole board (C) for Discord", "base"),
             ("  g                   Cycle icon set: nerd / unicode / emoji / ascii", "base"),
             ("  r                   Force refresh immediately", "base"),
@@ -2317,13 +3246,19 @@ class App:
 
     # -- group picker modal (cfbtui conferences.py exact modal) -----------
     def get_group_options(self):
-        is_college = self.league_key in ("cfb", "cbb")
-        first_label = "All conferences" if is_college else "All divisions / conferences"
+        if self.league_key in ("ufc", "box"):
+            first_label = "All weight classes"
+        else:
+            is_college = self.league_key in ("cfb", "cbb")
+            first_label = "All conferences" if is_college else "All divisions / conferences"
         return [("all", first_label)] + LEAGUE_GROUPS.get(self.league_key, [])
 
     def draw_group_picker(self, h, w):
-        is_college = self.league_key in ("cfb", "cbb")
-        title = "Conference" if is_college else "Division / Conference"
+        if self.league_key in ("ufc", "box"):
+            title = "Weight Class"
+        else:
+            is_college = self.league_key in ("cfb", "cbb")
+            title = "Conference" if is_college else "Division / Conference"
         options = self.get_group_options()
 
         box_w = min(w - 6, 44)
@@ -2396,6 +3331,8 @@ class App:
             aw_s = "**%s %s**" % (aw["abbr"], aw["score"]) if aw["score_int"] > hm["score_int"] else "%s %s" % (aw["abbr"], aw["score"])
             hm_s = "**%s %s**" % (hm["abbr"], hm["score"]) if hm["score_int"] > aw["score_int"] else "%s %s" % (hm["abbr"], hm["score"])
             line = "%s @ %s (%s)" % (aw_s, hm_s, game["short"] or game["detail"] or "Final")
+        if game.get("rivalry"):
+            line = "🔥 [%s] %s" % (game["rivalry"], line)
         if copy_to_clipboard(line):
             self.say("Copied game for Discord")
         else:
@@ -2465,7 +3402,7 @@ class App:
         rows = self.visible(games)
         cols = self.grid_cols(w) if self.layout == "grid" else 1
 
-        if ch in (ord("1"), ord("2"), ord("3"), ord("4"), ord("5"), ord("6"), ord("7")):
+        if ord("1") <= ch <= ord(str(min(9, len(LEAGUES)))):
             if not self.only:
                 self.switch_league(LEAGUES[int(chr(ch)) - 1]["key"])
             elif ch in (ord("1"), ord("2")) and rows:
@@ -2526,7 +3463,7 @@ class App:
             self.scr.clear()
             self.save_config()
         elif ch == ord("l"):
-            options = ["all", "live", "fav", "upsets"] + (["top25"] if self.lg()["poll"] else [])
+            options = ["all", "live", "final", "fav", "upsets"] + (["top25"] if self.lg()["poll"] else [])
             self.filter = options[(options.index(self.filter) + 1) % len(options)] if self.filter in options else "all"
             self.scroll = 0
             self.scr.clear()
@@ -2569,12 +3506,14 @@ class App:
             self.detail_scroll = max(0, self.detail_scroll - 8)
         elif ch == ord("c") and self.detail_game:
             self.copy_game_discord(self.detail_game)
+        elif ch in (ord("T"), ord("t")):
+            self.open_extra("stand")
         elif ch in (curses.KEY_ENTER, 10, 13, ord("b")):
             self.view = "board"
         return True
 
     def handle_extra(self, ch):
-        if ch in (ord("1"), ord("2"), ord("3"), ord("4"), ord("5"), ord("6"), ord("7")) and not self.only:
+        if ord("1") <= ch <= ord(str(min(9, len(LEAGUES)))) and not self.only:
             self.switch_league(LEAGUES[int(chr(ch)) - 1]["key"])
         elif ch == ord("R"):
             if self.extra_kind == "ranks":
@@ -2690,6 +3629,30 @@ class App:
         self.extra_sel = self.extra_scroll = 0
         self.extra_group = 0
         self.extra_tab = 0
+        if kind == "stand":
+            target_gm = self.detail_game
+            if not target_gm:
+                games = self.cache_get(self.board_key()) or []
+                rows = self.visible(games)
+                if rows:
+                    target_gm = rows[self.selected_index(rows)]
+            if target_gm:
+                t_league = target_gm.get("league", self.league_key)
+                if self.league_key == "all" and t_league != "all":
+                    self.league_key = t_league
+                s_key = "stand:%s" % t_league
+                standings_data = self.cache_get(s_key)
+                if not standings_data:
+                    lg = BY_KEY.get(t_league, self.lg())
+                    standings_data = self.ensure(s_key, lambda: parse_standings(lg), 300)
+                if standings_data:
+                    side_st = get_team_standing(standings_data, target_gm.get("away"), t_league) or \
+                              get_team_standing(standings_data, target_gm.get("home"), t_league)
+                    if side_st:
+                        for gi, grp in enumerate(standings_data):
+                            if grp["name"] == side_st["group"]:
+                                self.extra_group = gi
+                                break
         if self.scr:
             self.scr.clear()
 
@@ -2724,6 +3687,27 @@ def plain(args):
         games.sort(key=lambda g: (order.get(g["state"], 3), g["start"] or dt.datetime.max.replace(tzinfo=dt.timezone.utc)))
         for g in games:
             away, home = g["away"], g["home"]
+            if g.get("is_combat"):
+                wc = g.get("weight_class") or "Bout"
+                if g["state"] == "pre":
+                    status = g["start"].strftime("%a %H:%M") if g["start"] else "Pre"
+                    tail = spread_text(g["odds"]) or (g.get("tv") or "")
+                else:
+                    status = g.get("method") or g["short"] or "Final"
+                    clk_str = f" R{g['period']} {g['clock']}".rstrip() if g.get("period") else ""
+                    tail = clk_str
+                if g["state"] == "post":
+                    if away.get("winner"):
+                        print("   %-15s %-12s (%s) def. %s via %s%s" % (
+                            wc[:15], away["abbr"][:12], away["record"], home["abbr"][:12], status, f" ({tail})" if tail else ""))
+                        continue
+                    elif home.get("winner"):
+                        print("   %-15s %-12s (%s) def. %s via %s%s" % (
+                            wc[:15], home["abbr"][:12], home["record"], away["abbr"][:12], status, f" ({tail})" if tail else ""))
+                        continue
+                print("   %-15s %-12s (%s) vs %-12s (%s)  %-10s %s" % (
+                    wc[:15], away["abbr"][:12], away["record"], home["abbr"][:12], home["record"], status[:10], tail))
+                continue
             if g["state"] == "pre":
                 status = g["start"].strftime("%a %H:%M") if g["start"] else ""
                 tail = spread_text(g["odds"])
@@ -2765,6 +3749,10 @@ ALIASES = {
     "nhltui": "nhl",
     "mlbtui": "mlb",
     "nfltui": "nfl",
+    "ufctui": "ufc",
+    "mmalui": "ufc",
+    "mmatui": "ufc",
+    "boxtui": "box",
 }
 
 
@@ -2773,7 +3761,7 @@ def build_parser(prog="sportstui"):
     parser = argparse.ArgumentParser(
         prog=prog,
         description=("A terminal scoreboard for %s." % BY_KEY[only]["name"])
-        if only else "A terminal scoreboard for CFB, NFL, NHL, NBA, CBB and MLB.",
+        if only else "A terminal scoreboard for CFB, NFL, NHL, NBA, CBB, MLB, UFC and Boxing.",
     )
     parser.add_argument("--league", choices=list(BY_KEY),
                         help="start on this league (combined board only)")

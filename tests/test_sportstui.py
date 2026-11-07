@@ -3,6 +3,7 @@
 
 import datetime as dt
 import sys
+import time
 import unittest
 from pathlib import Path
 
@@ -18,8 +19,8 @@ sportstui = loader.load_module()
 
 class TestSportstui(unittest.TestCase):
     def test_league_groups_and_filtering(self):
-        # All 6 leagues have configured group/conference pickers
-        for lg in ("cfb", "nfl", "nhl", "nba", "cbb", "mlb"):
+        # All 8 sports leagues have configured group/conference/weight pickers
+        for lg in ("cfb", "nfl", "nhl", "nba", "cbb", "mlb", "ufc", "box"):
             self.assertIn(lg, sportstui.LEAGUE_GROUPS)
             self.assertGreater(len(sportstui.LEAGUE_GROUPS[lg]), 0)
 
@@ -66,19 +67,19 @@ class TestSportstui(unittest.TestCase):
         self.assertEqual(nfl_filtered[0]["id"], "10")
 
     def test_league_order(self):
-        expected_order = ["all", "cfb", "nfl", "nhl", "nba", "cbb", "mlb"]
+        expected_order = ["all", "cfb", "nfl", "nhl", "nba", "cbb", "mlb", "ufc", "box"]
         actual_order = [lg["key"] for lg in sportstui.LEAGUES]
         self.assertEqual(actual_order, expected_order)
 
-        # 1 is ALL sports together, rest shift to 2: CFB, 3: NFL, 4: NHL, 5: NBA, 6: CBB, 7: MLB
+        # 1 is ALL sports together, rest shift to 2: CFB, 3: NFL, 4: NHL, 5: NBA, 6: CBB, 7: MLB, 8: UFC, 9: BOX
         self.assertEqual(sportstui.LEAGUES[0]["key"], "all")
-        self.assertEqual([lg["key"] for lg in sportstui.SPORT_LEAGUES], ["cfb", "nfl", "nhl", "nba", "cbb", "mlb"])
+        self.assertEqual([lg["key"] for lg in sportstui.SPORT_LEAGUES], ["cfb", "nfl", "nhl", "nba", "cbb", "mlb", "ufc", "box"])
 
     def test_glyph_sets(self):
         for name in ("nerd", "unicode", "emoji", "ascii"):
             self.assertIn(name, sportstui.GLYPHS)
             g = sportstui.GLYPHS[name]
-            for key in ("live", "final", "pregame", "star", "upset", "red_zone", "fresh"):
+            for key in ("live", "final", "pregame", "star", "upset", "red_zone", "rivalry", "fresh"):
                 self.assertIn(key, g)
         # Check emoji specific values
         em = sportstui.GLYPHS["emoji"]
@@ -86,6 +87,7 @@ class TestSportstui(unittest.TestCase):
         self.assertEqual(em["final"], "🏁")
         self.assertEqual(em["star"], "⭐")
         self.assertEqual(em["red_zone"], "🔥")
+        self.assertEqual(em["rivalry"], "🔥")
 
     def test_aliases(self):
         self.assertEqual(sportstui.ALIASES.get("cfbtui"), "cfb")
@@ -95,6 +97,10 @@ class TestSportstui(unittest.TestCase):
         self.assertEqual(sportstui.ALIASES.get("nhltui"), "nhl")
         self.assertEqual(sportstui.ALIASES.get("mlbtui"), "mlb")
         self.assertEqual(sportstui.ALIASES.get("nfltui"), "nfl")
+        self.assertEqual(sportstui.ALIASES.get("ufctui"), "ufc")
+        self.assertEqual(sportstui.ALIASES.get("mmalui"), "ufc")
+        self.assertEqual(sportstui.ALIASES.get("mmatui"), "ufc")
+        self.assertEqual(sportstui.ALIASES.get("boxtui"), "box")
 
     def test_color_conversions(self):
         # Test basic hex colors
@@ -735,13 +741,13 @@ class TestSportstui(unittest.TestCase):
             self.assertLessEqual(end_x, w, f"Card layout overflows width {w}: ends at {end_x}")
 
     def test_all_sports_mode_and_league_shifting(self):
-        """Test that 1 is ALL sports together, and leagues shift to 2-7."""
-        # 1: ALL, 2: CFB, 3: NFL, 4: NHL, 5: NBA, 6: CBB, 7: MLB
+        """Test that 1 is ALL sports together, and leagues shift to 2-9."""
+        # 1: ALL, 2: CFB, 3: NFL, 4: NHL, 5: NBA, 6: CBB, 7: MLB, 8: UFC, 9: BOX
         keys = [lg["key"] for lg in sportstui.LEAGUES]
-        self.assertEqual(keys, ["all", "cfb", "nfl", "nhl", "nba", "cbb", "mlb"])
+        self.assertEqual(keys, ["all", "cfb", "nfl", "nhl", "nba", "cbb", "mlb", "ufc", "box"])
 
         names = [lg["name"] for lg in sportstui.LEAGUES]
-        self.assertEqual(names, ["ALL", "CFB", "NFL", "NHL", "NBA", "CBB", "MLB"])
+        self.assertEqual(names, ["ALL", "CFB", "NFL", "NHL", "NBA", "CBB", "MLB", "UFC", "BOX"])
 
         opts = sportstui.parse_args([])
         app = sportstui.App(None, opts)
@@ -852,6 +858,653 @@ class TestSportstui(unittest.TestCase):
             self.assertEqual(sportstui.str_width(duke_row), 40)
             self.assertIn(exp_arrow, bc_row)
             self.assertNotIn(exp_arrow, duke_row)
+
+    def test_ufc_and_box_league_definitions(self):
+        """Verify UFC and Boxing league definitions and combat period labels."""
+        ufc = sportstui.BY_KEY["ufc"]
+        self.assertTrue(ufc.get("combat"))
+        self.assertTrue(ufc.get("poll"))
+        self.assertEqual(ufc.get("period_prefix"), "R")
+        self.assertEqual(ufc.get("reg_periods"), 3)
+
+        box = sportstui.BY_KEY["box"]
+        self.assertTrue(box.get("combat"))
+        self.assertFalse(box.get("poll"))
+        self.assertEqual(box.get("period_prefix"), "R")
+        self.assertEqual(box.get("reg_periods"), 12)
+
+        self.assertEqual(sportstui.period_label("ufc", 2), "R2")
+        self.assertEqual(sportstui.period_label("box", 10), "R10")
+
+    def test_parse_ufc_bouts(self):
+        """Verify unpacking of UFC event card into individual bouts."""
+        mock_events = [{
+            "id": "60001",
+            "name": "UFC 300: Pereira vs. Hill",
+            "date": "2026-11-07T22:00Z",
+            "venues": [{"fullName": "T-Mobile Arena"}],
+            "competitions": [
+                {
+                    "id": "40101",
+                    "type": {"abbreviation": "Light Heavyweight"},
+                    "types": [{"text": "UFC Light Heavyweight Title"}],
+                    "status": {
+                        "period": 1,
+                        "displayClock": "3:14",
+                        "type": {"state": "post", "shortDetail": "Final (KO/TKO)"}
+                    },
+                    "competitors": [
+                        {
+                            "order": 1,
+                            "winner": True,
+                            "athlete": {"displayName": "Alex Pereira", "shortName": "A. Pereira", "flag": {"href": "https://flag.png"}},
+                            "records": [{"summary": "10-2-0"}]
+                        },
+                        {
+                            "order": 2,
+                            "winner": False,
+                            "athlete": {"displayName": "Jamahal Hill", "shortName": "J. Hill", "flag": {"href": "https://flag2.png"}},
+                            "records": [{"summary": "12-2-0"}]
+                        }
+                    ]
+                }
+            ]
+        }]
+        bouts = sportstui._unpack_ufc_events(mock_events)
+        self.assertEqual(len(bouts), 1)
+        b = bouts[0]
+        self.assertEqual(b["league"], "ufc")
+        self.assertTrue(b["is_combat"])
+        self.assertEqual(b["weight_class"], "Light Heavyweight")
+        self.assertTrue(b["is_title"])
+        self.assertEqual(b["home"]["name"], "A. Pereira")
+        self.assertEqual(b["home"]["color"], "CC0000")  # Red corner
+        self.assertTrue(b["home"]["winner"])
+        self.assertEqual(b["home"]["score"], "✔")
+        self.assertEqual(b["away"]["name"], "J. Hill")
+        self.assertEqual(b["away"]["color"], "0047AB")  # Blue corner
+        self.assertFalse(b["away"]["winner"])
+
+    def test_parse_ufc_rankings(self):
+        """Verify parsing of UFC P4P and divisional rankings."""
+        mock_rankings_payload = {
+            "rankings": [
+                {
+                    "name": "Men's Pound for Pound Rankings",
+                    "ranks": [
+                        {
+                            "current": 1,
+                            "hasAccolade": True,
+                            "defenses": 3,
+                            "recordSummary": "17-1-0",
+                            "athlete": {"displayName": "Ilia Topuria", "shortname": "Topuria", "color": "#FFCC00"}
+                        },
+                        {
+                            "current": 2,
+                            "hasAccolade": False,
+                            "defenses": 0,
+                            "recordSummary": "31-3-0",
+                            "athlete": {"displayName": "Max Holloway", "shortname": "Holloway", "color": "#000000"}
+                        }
+                    ]
+                }
+            ]
+        }
+        orig_fetch = sportstui.fetch_json
+        try:
+            sportstui.fetch_json = lambda url: mock_rankings_payload
+            polls = sportstui.parse_rankings(sportstui.BY_KEY["ufc"])
+            self.assertEqual(len(polls), 1)
+            poll = polls[0]
+            self.assertEqual(poll["name"], "Men's Pound for Pound Rankings")
+            self.assertEqual(len(poll["ranks"]), 2)
+            self.assertEqual(poll["ranks"][0]["team"], "Ilia Topuria (C)")
+            self.assertEqual(poll["ranks"][0]["rank"], 1)
+            self.assertEqual(poll["ranks"][0]["first"], 1)
+            self.assertEqual(poll["ranks"][1]["team"], "Max Holloway")
+            self.assertEqual(poll["ranks"][1]["rank"], 2)
+        finally:
+            sportstui.fetch_json = orig_fetch
+
+    def test_combat_card_rendering_and_alignment(self):
+        """Test combat sports card cell text width and card title headers."""
+        opts = sportstui.parse_args(["--league", "ufc"])
+        app = sportstui.App(None, opts)
+        game = {
+            "id": "600:400",
+            "league": "ufc",
+            "is_combat": True,
+            "weight_class": "Featherweight",
+            "is_title": True,
+            "state": "post",
+            "method": "KO/TKO",
+            "period": 3,
+            "clock": "1:34",
+            "short": "Final (KO/TKO)",
+            "detail": "Final (KO/TKO)",
+            "start": None,
+            "situation": {},
+            "odds": {},
+            "upset": None,
+            "away": {"id": "1", "abbr": "Holloway", "name": "Max Holloway", "full": "Max Holloway", "color": "0047AB", "rank": 2, "record": "28-9-0", "winner": False, "score": "-", "score_int": 0},
+            "home": {"id": "2", "abbr": "Topuria", "name": "Ilia Topuria", "full": "Ilia Topuria", "color": "CC0000", "rank": 1, "record": "17-1-0", "winner": True, "score": "✔", "score_int": 1},
+        }
+
+        # Card cell text maintains exact width
+        row_away = app._team_cell_text(game, game["away"], True, 36)
+        row_home = app._team_cell_text(game, game["home"], False, 36)
+        self.assertEqual(sportstui.str_width(row_away), 36)
+        self.assertEqual(sportstui.str_width(row_home), 36)
+        self.assertIn("WIN", row_home)
+
+        # Card status text shows finish method and round
+        st_txt = app.status_text(game)
+        self.assertIn("KO/TKO", st_txt)
+        self.assertIn("R3 1:34", st_txt)
+
+        # Test draw_box captures weight class and title badge
+        captured_titles = []
+        def mock_box(y, x, h, w, attr, title="", heavy=False):
+            captured_titles.append(title)
+        app.put = lambda *args, **kwargs: None
+        app.fill_line = lambda *args, **kwargs: None
+        app.segment = lambda *args, **kwargs: None
+        app.draw_box = mock_box
+        app.draw_card(game, 0, 0, 38, False)
+        self.assertTrue(any("FEATHERWEIGHT" in t and "🏆 TITLE" in t for t in captured_titles))
+
+    def test_ordinal_and_shorten_group(self):
+        # Ordinal numbers
+        self.assertEqual(sportstui.ordinal(1), "1st")
+        self.assertEqual(sportstui.ordinal(2), "2nd")
+        self.assertEqual(sportstui.ordinal(3), "3rd")
+        self.assertEqual(sportstui.ordinal(4), "4th")
+        self.assertEqual(sportstui.ordinal(11), "11th")
+        self.assertEqual(sportstui.ordinal(12), "12th")
+        self.assertEqual(sportstui.ordinal(13), "13th")
+        self.assertEqual(sportstui.ordinal(21), "21st")
+        self.assertEqual(sportstui.ordinal(22), "22nd")
+        self.assertEqual(sportstui.ordinal(23), "23rd")
+        self.assertEqual(sportstui.ordinal(30), "30th")
+        self.assertEqual(sportstui.ordinal(101), "101st")
+        self.assertEqual(sportstui.ordinal(111), "111th")
+
+        # Group name shortening
+        self.assertEqual(sportstui.shorten_group("Eastern Conference"), "East")
+        self.assertEqual(sportstui.shorten_group("Western Conference"), "West")
+        self.assertEqual(sportstui.shorten_group("American Football Conference"), "AFC")
+        self.assertEqual(sportstui.shorten_group("National Football Conference"), "NFC")
+        self.assertEqual(sportstui.shorten_group("Big Ten Conference"), "Big Ten")
+        self.assertEqual(sportstui.shorten_group("Southeastern Conference"), "SEC")
+        self.assertEqual(sportstui.shorten_group("Atlantic Coast Conference"), "ACC")
+        self.assertEqual(sportstui.shorten_group("Big 12 Conference"), "Big 12")
+        self.assertEqual(sportstui.shorten_group("AL East Division"), "AL East")
+
+    def test_get_team_standing(self):
+        # Mock NBA standings groups
+        nba_groups = [
+            {
+                "name": "Eastern Conference",
+                "rows": [
+                    {
+                        "id": "20",
+                        "team": "76ers",
+                        "full": "Philadelphia 76ers",
+                        "abbr": "PHI",
+                        "color": "006BB6",
+                        "stats": {"overall": "8-2", "gamesBehind": "-", "streak": "W2", "playoffSeed": "1"},
+                    },
+                    {
+                        "id": "2",
+                        "team": "Celtics",
+                        "full": "Boston Celtics",
+                        "abbr": "BOS",
+                        "color": "007A33",
+                        "stats": {"overall": "7-2", "gamesBehind": "0.5", "streak": "W3", "playoffSeed": "2"},
+                    },
+                ],
+            }
+        ]
+
+        # Match by abbr
+        st_phi = sportstui.get_team_standing(nba_groups, {"id": "20", "abbr": "PHI", "name": "76ers", "full": "Philadelphia 76ers"}, "nba")
+        self.assertIsNotNone(st_phi)
+        self.assertEqual(st_phi["rank"], 1)
+        self.assertEqual(st_phi["group_short"], "East")
+        self.assertEqual(st_phi["badge"], "1st East (- GB)")
+        self.assertEqual(st_phi["summary"], "1st in East (8-2, - GB)")
+        self.assertEqual(st_phi["streak"], "W2")
+        self.assertEqual(st_phi["seed"], "1")
+
+        # Match by ID with GB
+        st_bos = sportstui.get_team_standing(nba_groups, {"id": "2", "abbr": "BOS", "name": "Celtics", "full": "Boston Celtics"}, "nba")
+        self.assertIsNotNone(st_bos)
+        self.assertEqual(st_bos["rank"], 2)
+        self.assertEqual(st_bos["badge"], "2nd East (0.5 GB)")
+        self.assertEqual(st_bos["summary"], "2nd in East (7-2, 0.5 GB)")
+
+        # Mock CFB standings
+        cfb_groups = [
+            {
+                "name": "Big Ten Conference",
+                "rows": [
+                    {
+                        "id": "127",
+                        "team": "Spartans",
+                        "full": "Michigan State Spartans",
+                        "abbr": "MSU",
+                        "color": "18453B",
+                        "stats": {"overall": "8-1", "vs. Conf.": "5-1", "streak": "W4"},
+                    }
+                ],
+            }
+        ]
+        st_msu = sportstui.get_team_standing(cfb_groups, {"id": "127", "abbr": "MSU", "name": "Michigan State", "full": "Michigan State Spartans"}, "cfb")
+        self.assertIsNotNone(st_msu)
+        self.assertEqual(st_msu["rank"], 1)
+        self.assertEqual(st_msu["badge"], "1st Big Ten (5-1)")
+        self.assertEqual(st_msu["summary"], "1st in Big Ten (5-1 Conf, 8-1 Ovr)")
+
+        # Test collision handling: ensure Michigan State does not match Michigan
+        cfb_collision_groups = [
+            {
+                "name": "Big Ten Conference",
+                "rows": [
+                    {
+                        "id": "130",
+                        "team": "Michigan",
+                        "full": "Michigan Wolverines",
+                        "abbr": "MICH",
+                        "color": "00274C",
+                        "stats": {"overall": "5-3", "vs. Conf.": "2-3", "streak": "W1"},
+                    },
+                    {
+                        "id": "127",
+                        "team": "Michigan St",
+                        "full": "Michigan State Spartans",
+                        "abbr": "MSU",
+                        "color": "173F35",
+                        "stats": {"overall": "2-6", "vs. Conf.": "0-5", "streak": "L5"},
+                    },
+                ],
+            }
+        ]
+        msu_side = {"id": "127", "abbr": "MSU", "name": "Michigan St", "full": "Michigan State Spartans", "record": "2-6"}
+        mich_side = {"id": "130", "abbr": "MICH", "name": "Michigan", "full": "Michigan Wolverines", "record": "5-3"}
+        st_msu_res = sportstui.get_team_standing(cfb_collision_groups, msu_side, "cfb")
+        st_mich_res = sportstui.get_team_standing(cfb_collision_groups, mich_side, "cfb")
+        self.assertEqual(st_msu_res["rank"], 2)
+        self.assertEqual(st_msu_res["summary"], "2nd in Big Ten (0-5 Conf, 2-6 Ovr)")
+        self.assertEqual(st_mich_res["rank"], 1)
+        self.assertEqual(st_mich_res["summary"], "1st in Big Ten (2-3 Conf, 5-3 Ovr)")
+
+        # Non-matching returns None
+        st_none = sportstui.get_team_standing(cfb_groups, {"id": "999", "abbr": "XYZ", "name": "Unknown"}, "cfb")
+        self.assertIsNone(st_none)
+        self.assertIsNone(sportstui.get_team_standing([], {"id": "127"}, "cfb"))
+
+    def test_draw_detail_standings(self):
+        opts = sportstui.parse_args([])
+        app = sportstui.App(None, opts)
+        app.league_key = "nba"
+        game = {
+            "id": "100",
+            "league": "nba",
+            "state": "post",
+            "score": "100-98",
+            "status_name": "STATUS_FINAL",
+            "detail": "Final",
+            "short": "Final",
+            "start": None,
+            "situation": {},
+            "odds": {},
+            "venue": "TD Garden",
+            "tv": "ESPN",
+            "upset": None,
+            "away": {"id": "20", "abbr": "PHI", "name": "76ers", "full": "Philadelphia 76ers", "color": "006BB6", "rank": None, "record": "8-2", "score": "98", "score_int": 98, "winner": False},
+            "home": {"id": "2", "abbr": "BOS", "name": "Celtics", "full": "Boston Celtics", "color": "007A33", "rank": None, "record": "7-2", "score": "100", "score_int": 100, "winner": True},
+        }
+        app.detail_game = game
+
+        # Inject cached standings and detail data
+        nba_groups = [
+            {
+                "name": "Eastern Conference",
+                "rows": [
+                    {"id": "20", "team": "76ers", "full": "Philadelphia 76ers", "abbr": "PHI", "color": "006BB6", "stats": {"overall": "8-2", "gamesBehind": "-", "streak": "W2", "playoffSeed": "1"}},
+                    {"id": "2", "team": "Celtics", "full": "Boston Celtics", "abbr": "BOS", "color": "007A33", "stats": {"overall": "7-2", "gamesBehind": "0.5", "streak": "W3", "playoffSeed": "2"}},
+                ],
+            }
+        ]
+        app.cache["stand:nba"] = (time.time(), nba_groups, None)
+        app.cache["detail:nba:100"] = (time.time(), {
+            "location": "Boston, MA",
+            "linescores": {"away": [24, 25, 24, 25], "home": [25, 25, 25, 25]},
+            "leaders": [],
+            "plays": [],
+            "winprob": None,
+        }, None)
+
+        captured_puts = []
+        captured_segments = []
+        app.put = lambda y, x, text, *args, **kwargs: captured_puts.append((y, x, text))
+        app.segment = lambda y, x, segs, *args, **kwargs: captured_segments.append((y, x, segs))
+
+        app.draw_detail(0, 40, 100)
+
+        # Team banners should include the standings badges
+        banner_texts = [text for y, x, text in captured_puts if "Philadelphia 76ers" in text or "Boston Celtics" in text]
+        self.assertTrue(any("1st East (- GB)" in t for t in banner_texts))
+        self.assertTrue(any("2nd East (0.5 GB)" in t for t in banner_texts))
+
+        # Body virtual lines should include League Standings section with full team names
+        all_seg_texts = ["".join(s[0] for s in segs) for _, _, segs in captured_segments]
+        self.assertTrue(any("League Standings" in t for t in all_seg_texts))
+        self.assertTrue(any("Philadelphia 76ers" in t for t in all_seg_texts))
+        self.assertTrue(any("Boston Celtics" in t for t in all_seg_texts))
+        self.assertTrue(any("1st in East (8-2, - GB)" in t for t in all_seg_texts))
+        self.assertTrue(any("2nd in East (7-2, 0.5 GB)" in t for t in all_seg_texts))
+
+        # Body should also include full conference standings table with both teams highlighted
+        self.assertTrue(any("Eastern Conference Standings" in t for t in all_seg_texts))
+        self.assertTrue(any("▸PHI" in t for t in all_seg_texts))
+        self.assertTrue(any("▸BOS" in t for t in all_seg_texts))
+
+        # Test T key in detail opens extra standings focused on game's group
+        app.handle_detail(ord("T"))
+        self.assertEqual(app.view, "extra")
+        self.assertEqual(app.extra_kind, "stand")
+        self.assertEqual(app.extra_group, 0)
+
+    def test_smart_team_name_resolution(self):
+        # Teams where shortDisplayName is an abbreviation or missing (FAU, UTSA, etc.)
+        mock_raw_fau = {
+            "standings": {
+                "entries": [
+                    {
+                        "team": {
+                            "id": "2226",
+                            "abbreviation": "FAU",
+                            "shortDisplayName": "FAU",
+                            "location": "Florida Atlantic",
+                            "name": "Owls",
+                            "displayName": "Florida Atlantic Owls",
+                            "color": "003366",
+                        },
+                        "stats": [{"name": "overall", "displayValue": "6-2"}],
+                    },
+                    {
+                        "team": {
+                            "id": "127",
+                            "abbreviation": "MSU",
+                            "shortDisplayName": "Michigan St",
+                            "location": "Michigan State",
+                            "name": "Spartans",
+                            "displayName": "Michigan State Spartans",
+                            "color": "18453B",
+                        },
+                        "stats": [{"name": "overall", "displayValue": "5-3"}],
+                    },
+                ]
+            },
+            "name": "American Athletic Conference",
+        }
+        with unittest.mock.patch("sportstui.fetch_json", return_value=mock_raw_fau):
+            groups = sportstui.parse_standings(sportstui.BY_KEY["cfb"])
+            self.assertEqual(len(groups), 1)
+            row_fau = groups[0]["rows"][0]
+            # FAU short name should resolve to location "Florida Atlantic" rather than raw "FAU"
+            self.assertEqual(row_fau["team"], "Florida Atlantic")
+            self.assertEqual(row_fau["full"], "Florida Atlantic Owls")
+
+            # In parse_side as well
+            side_fau = sportstui.parse_side({"team": mock_raw_fau["standings"]["entries"][0]["team"], "score": "24"})
+            self.assertEqual(side_fau["name"], "Florida Atlantic")
+            self.assertEqual(side_fau["full"], "Florida Atlantic Owls")
+
+    def test_get_cutoff_lines(self):
+        # NHL: Division (top 3) vs Conference (top 8)
+        self.assertEqual(sportstui.get_cutoff_lines("nhl", "Atlantic Division", 8), {3: "Playoff Cutoff (Top 3)"})
+        self.assertEqual(sportstui.get_cutoff_lines("nhl", "Eastern Conference", 16), {8: "Playoff Cutoff (Top 8)"})
+
+        # NBA: Conference (top 6 playoff, top 10 play-in)
+        self.assertEqual(sportstui.get_cutoff_lines("nba", "Eastern Conference", 15), {6: "Playoff Cutoff (Top 6)", 10: "Play-In Cutoff (Top 10)"})
+
+        # NFL: Conference (top 7) vs Division (top 1)
+        self.assertEqual(sportstui.get_cutoff_lines("nfl", "American Football Conference", 16), {7: "Playoff Cutoff (Top 7)"})
+        self.assertEqual(sportstui.get_cutoff_lines("nfl", "AFC East", 4), {1: "Division Winner"})
+
+        # MLB: League (top 6) vs Division (top 1)
+        self.assertEqual(sportstui.get_cutoff_lines("mlb", "American League", 15), {6: "Playoff Cutoff (Top 6)"})
+        self.assertEqual(sportstui.get_cutoff_lines("mlb", "AL East", 5), {1: "Division Winner"})
+
+        # MLS: Conference (top 7 and top 9)
+        self.assertEqual(sportstui.get_cutoff_lines("mls", "Eastern Conference", 14), {7: "Playoff Cutoff (Top 7)", 9: "Wild Card Cutoff (Top 9)"})
+
+        # CFB / CBB: No fixed rank cutoff
+        self.assertEqual(sportstui.get_cutoff_lines("cfb", "Big Ten", 18), {})
+        self.assertEqual(sportstui.get_cutoff_lines("cbb", "ACC", 18), {})
+
+    def test_playoff_cutoff_rendering_in_detail_and_standings(self):
+        opts = sportstui.parse_args([])
+        app = sportstui.App(None, opts)
+        app.league_key = "nhl"
+
+        # Mock NHL game with Atlantic Division standings
+        game = {
+            "id": "500",
+            "league": "nhl",
+            "state": "post",
+            "score": "4-2",
+            "status_name": "STATUS_FINAL",
+            "detail": "Final",
+            "short": "Final",
+            "start": None,
+            "situation": {},
+            "odds": {},
+            "venue": "Amerant Bank Arena",
+            "tv": "ESPN+",
+            "upset": None,
+            "away": {"id": "10", "abbr": "TOR", "name": "Maple Leafs", "full": "Toronto Maple Leafs", "color": "00205B", "rank": None, "record": "10-5-1", "score": "2", "score_int": 2, "winner": False},
+            "home": {"id": "13", "abbr": "FLA", "name": "Panthers", "full": "Florida Panthers", "color": "041E42", "rank": None, "record": "11-4-1", "score": "4", "score_int": 4, "winner": True},
+        }
+        app.detail_game = game
+
+        nhl_groups = [
+            {
+                "name": "Atlantic Division",
+                "rows": [
+                    {"id": "13", "team": "Panthers", "full": "Florida Panthers", "abbr": "FLA", "color": "041E42", "stats": {"points": "23", "overall": "11-4-1"}},
+                    {"id": "10", "team": "Maple Leafs", "full": "Toronto Maple Leafs", "abbr": "TOR", "color": "00205B", "stats": {"points": "21", "overall": "10-5-1"}},
+                    {"id": "14", "team": "Lightning", "full": "Tampa Bay Lightning", "abbr": "TBL", "color": "002868", "stats": {"points": "20", "overall": "9-5-2"}},
+                    {"id": "6", "team": "Bruins", "full": "Boston Bruins", "abbr": "BOS", "color": "FFB81C", "stats": {"points": "18", "overall": "8-6-2"}},
+                    {"id": "17", "team": "Red Wings", "full": "Detroit Red Wings", "abbr": "DET", "color": "CE1126", "stats": {"points": "16", "overall": "7-7-2"}},
+                ],
+            }
+        ]
+        app.cache["stand:nhl"] = (time.time(), nhl_groups, None)
+        app.cache["detail:nhl:500"] = (time.time(), {
+            "location": "Sunrise, FL",
+            "linescores": {"away": [1, 0, 1], "home": [2, 1, 1]},
+            "leaders": [],
+            "plays": [],
+            "winprob": None,
+        }, None)
+
+        captured_segments = []
+        captured_puts = []
+        app.put = lambda y, x, text, *args, **kwargs: captured_puts.append((y, x, text))
+        app.segment = lambda y, x, segs, *args, **kwargs: captured_segments.append((y, x, segs))
+
+        # 1. Test Game Detail has cutoff line after Rank 3
+        app.draw_detail(0, 40, 100)
+        all_seg_texts = ["".join(s[0] for s in segs) for _, _, segs in captured_segments]
+        self.assertTrue(any("Playoff Cutoff (Top 3)" in t for t in all_seg_texts))
+
+        # 2. Test draw_standings has cutoff line rendered
+        captured_puts.clear()
+        captured_segments.clear()
+        app.draw_standings(nhl_groups, 0, 30, 80)
+        self.assertTrue(any("Playoff Cutoff (Top 3)" in text for y, x, text in captured_puts))
+
+    def test_rivalry_detection_and_rendering(self):
+        # 1. Detection via curated dictionary
+        mock_ev_msu = {
+            "id": "1001",
+            "competitions": [
+                {
+                    "competitors": [
+                        {"homeAway": "away", "team": {"abbreviation": "MSU", "shortDisplayName": "Michigan St"}, "score": "0"},
+                        {"homeAway": "home", "team": {"abbreviation": "MICH", "shortDisplayName": "Michigan"}, "score": "0"},
+                    ],
+                    "notes": [],
+                    "status": {"type": {"state": "pre", "name": "STATUS_SCHEDULED"}},
+                }
+            ]
+        }
+        game_msu = sportstui.parse_game(mock_ev_msu, sportstui.BY_KEY["cfb"])
+        self.assertIsNotNone(game_msu["rivalry"])
+        self.assertEqual(game_msu["rivalry"], "Paul Bunyan Trophy")
+
+        # Holy War detection
+        mock_ev_byu = {
+            "id": "1002",
+            "competitions": [
+                {
+                    "competitors": [
+                        {"homeAway": "away", "team": {"abbreviation": "BYU", "shortDisplayName": "BYU"}, "score": "0"},
+                        {"homeAway": "home", "team": {"abbreviation": "UTAH", "shortDisplayName": "Utah"}, "score": "0"},
+                    ],
+                    "notes": [],
+                    "status": {"type": {"state": "pre", "name": "STATUS_SCHEDULED"}},
+                }
+            ]
+        }
+        game_byu = sportstui.parse_game(mock_ev_byu, sportstui.BY_KEY["cfb"])
+        self.assertEqual(game_byu["rivalry"], "Holy War")
+
+        # Bears vs Packers detection
+        mock_ev_nfl = {
+            "id": "1003",
+            "competitions": [
+                {
+                    "competitors": [
+                        {"homeAway": "away", "team": {"abbreviation": "CHI", "shortDisplayName": "Bears"}, "score": "0"},
+                        {"homeAway": "home", "team": {"abbreviation": "GB", "shortDisplayName": "Packers"}, "score": "0"},
+                    ],
+                    "notes": [],
+                    "status": {"type": {"state": "pre", "name": "STATUS_SCHEDULED"}},
+                }
+            ]
+        }
+        game_nfl = sportstui.parse_game(mock_ev_nfl, sportstui.BY_KEY["nfl"])
+        self.assertEqual(game_nfl["rivalry"], "Bears–Packers Rivalry")
+
+        # 2. Card rendering with fire badge
+        opts = sportstui.parse_args([])
+        app = sportstui.App(None, opts)
+        app.glyphs = "emoji"
+        captured_boxes = []
+        app.draw_box = lambda y, x, h, w, attr, title="", heavy=False: captured_boxes.append((title, heavy))
+        app.put = lambda *a, **kw: None
+        app.fill_line = lambda *a, **kw: None
+        app.segment = lambda *a, **kw: None
+
+        app.draw_card(game_msu, 0, 0, 42, False)
+        self.assertTrue(any("🔥" in title and "PAUL BUNYAN TROPHY" in title for title, _ in captured_boxes))
+        self.assertTrue(any(heavy for _, heavy in captured_boxes))
+
+        # 3. Game Detail rendering with rivalry banner
+        captured_detail_puts = []
+        app.put = lambda y, x, text, *a, **kw: captured_detail_puts.append((y, x, text))
+        app.detail_game = game_msu
+        app.cache["stand:cfb"] = (time.time(), [], None)
+        app.cache["detail:cfb:1001"] = (time.time(), {
+            "location": "Ann Arbor, MI",
+            "linescores": {"away": [], "home": []},
+            "leaders": [],
+            "plays": [],
+            "winprob": None
+        }, None)
+
+        app.draw_detail(0, 40, 100)
+        self.assertTrue(any("🔥 Rivalry Game" in text and "Paul Bunyan Trophy" in text for _, _, text in captured_detail_puts))
+
+    def test_completed_games_filter(self):
+        opts = sportstui.parse_args([])
+        app = sportstui.App(None, opts)
+        app.league_key = "cfb"
+
+        games = [
+            {"id": "1", "state": "pre", "start": None, "away": {"abbr": "MSU", "rank": None}, "home": {"abbr": "MICH", "rank": None}},
+            {"id": "2", "state": "in", "start": None, "away": {"abbr": "OSU", "rank": None}, "home": {"abbr": "PSU", "rank": None}},
+            {"id": "3", "state": "post", "start": None, "away": {"abbr": "TEX", "rank": None}, "home": {"abbr": "OU", "rank": None}},
+            {"id": "4", "state": "post", "start": None, "away": {"abbr": "BAMA", "rank": None}, "home": {"abbr": "LSU", "rank": None}},
+        ]
+
+        # 1. Filter = 'final'
+        app.filter = "final"
+        filtered_final = app.visible(games)
+        self.assertEqual(len(filtered_final), 2)
+        self.assertEqual({g["id"] for g in filtered_final}, {"3", "4"})
+
+        # 2. Filter = 'completed' alias
+        app.filter = "completed"
+        filtered_completed = app.visible(games)
+        self.assertEqual(len(filtered_completed), 2)
+        self.assertEqual({g["id"] for g in filtered_completed}, {"3", "4"})
+
+        # 3. Filter options rotation in CFB (with poll: top25 present)
+        app.league_key = "cfb"
+        cfb_options = ["all", "live", "final", "fav", "upsets"] + (["top25"] if app.lg()["poll"] else [])
+        self.assertIn("final", cfb_options)
+        self.assertEqual(cfb_options, ["all", "live", "final", "fav", "upsets", "top25"])
+
+        # 4. Filter options rotation in NFL (without poll)
+        app.league_key = "nfl"
+        nfl_options = ["all", "live", "final", "fav", "upsets"] + (["top25"] if app.lg()["poll"] else [])
+        self.assertIn("final", nfl_options)
+        self.assertEqual(nfl_options, ["all", "live", "final", "fav", "upsets"])
+
+    def test_news_all_league_aggregation(self):
+        from unittest.mock import patch
+
+        mock_art_cfb = {
+            "articles": [{
+                "id": "101",
+                "headline": "CFB Big Game",
+                "description": "Preview of match",
+                "published": "2026-11-07T14:00:00Z",
+                "links": {"web": {"href": "https://espn.com/cfb1"}},
+                "categories": [{"type": "team", "description": "MSU"}],
+            }]
+        }
+        mock_art_nfl = {
+            "articles": [{
+                "id": "102",
+                "headline": "NFL Big Game",
+                "description": "NFL summary",
+                "published": "2026-11-07T15:00:00Z",
+                "links": {"web": {"href": "https://espn.com/nfl1"}},
+                "categories": [{"type": "team", "description": "DET"}],
+            }]
+        }
+
+        def mock_fetch(url, *args, **kwargs):
+            if "college-football" in url:
+                return mock_art_cfb
+            elif "nfl" in url:
+                return mock_art_nfl
+            return {"articles": []}
+
+        with patch.object(sportstui, "fetch_json", side_effect=mock_fetch):
+            items = sportstui.parse_news(sportstui.BY_KEY["all"])
+            self.assertGreaterEqual(len(items), 2)
+            # Latest first
+            self.assertEqual(items[0]["id"], "102")
+            self.assertEqual(items[0]["league"], "NFL")
+            self.assertEqual(items[1]["id"], "101")
+            self.assertEqual(items[1]["league"], "CFB")
 
 
 if __name__ == "__main__":

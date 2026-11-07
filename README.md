@@ -1,8 +1,8 @@
 # sportstui
 
-**Six leagues, one scoreboard, zero dependencies.**
+**Eight leagues, one scoreboard, zero dependencies.**
 
-`sportstui` is a fast, colorful terminal scoreboard and sports ticker written in pure Python using standard library `curses` and `urllib`. It replicates the exact visual design of `WPTK/cfbtui` — full-bleed team color background bars with WCAG luminance contrast, timeouts remaining dots (`●●○`), `★ Favorites` / `Other games` sections, `⚡ UPSET` & `⚑ RED ZONE` heavy card borders, a live bottom `─ticker───` panel, side-by-side poll/standings boxes, and rich play-by-play game detail screens — across six major sports leagues:
+`sportstui` is a fast, colorful terminal scoreboard and sports ticker written in pure Python using standard library `curses` and `urllib`. It replicates the exact visual design of `WPTK/cfbtui` — full-bleed team color background bars with WCAG luminance contrast, timeouts remaining dots (`●●○`), `★ Favorites` / `Other games` sections, `⚡ UPSET` & `⚑ RED ZONE` heavy card borders, a live bottom `─ticker───` panel, side-by-side poll/standings boxes, and rich play-by-play game detail screens — across eight major sports and combat leagues:
 
 - **CFB**: College Football (NCAA FBS)
 - **NFL**: National Football League
@@ -10,6 +10,8 @@
 - **NBA**: National Basketball Association
 - **CBB**: Men's College Basketball (NCAA Division I)
 - **MLB**: Major League Baseball
+- **UFC**: Ultimate Fighting Championship / MMA Fight Cards & Bouts
+- **BOX**: Professional Boxing Schedules, Cards & Verified Results
 
 ---
 
@@ -19,13 +21,15 @@ You can run `sportstui` as a combined multi-league app or launch directly into a
 
 | Command | League | Description |
 | :--- | :--- | :--- |
-| `sportstui` | **All** | Combined multi-league scoreboard (press `1`–`7` or `Tab` to switch) |
+| `sportstui` | **All** | Combined multi-league scoreboard (press `1`–`9` or `Tab` to switch) |
 | `cfbtui` | **CFB** | College Football scoreboard & Top 25 rankings |
 | `nfltui` | **NFL** | NFL scoreboard, weekly slates, and division standings |
 | `nhltui` | **NHL** | NHL scoreboard, standings, and division tables |
 | `nbatui` | **NBA** | NBA scoreboard, standings, and box scores |
 | `cbbtui` / `ncaabtui` | **CBB** | Men's College Basketball & Top 25 rankings |
 | `mlbtui` | **MLB** | Major League Baseball scoreboard and standings |
+| `ufctui` / `mmalui` | **UFC** | UFC / MMA fight cards, Tale of the Tape, and P4P rankings |
+| `boxtui` | **BOX** | Professional Boxing fight schedule, cards, and stoppage results |
 
 ---
 
@@ -34,22 +38,22 @@ You can run `sportstui` as a combined multi-league app or launch directly into a
 | Key | Action |
 | :--- | :--- |
 | `1` | **ALL**: view all sports together on one unified board |
-| `2` – `7` / `Tab` | Switch between **2: CFB**, **3: NFL**, **4: NHL**, **5: NBA**, **6: CBB**, and **7: MLB** *(combined mode only)* |
+| `2` – `9` / `Tab` | Switch between **2: CFB**, **3: NFL**, **4: NHL**, **5: NBA**, **6: CBB**, **7: MLB**, **8: UFC**, and **9: BOX** *(combined mode only)* |
 | `[` / `]` | Previous / next day |
 | `w` / `W` | Next / previous week *(CFB and NFL only)* |
-| `t` | Jump to today's games |
+| `t` | Jump to today's games / fights |
 | `←` `↓` `↑` `→` (`j` / `k`) | 2D card navigation in grid view; row navigation in list view |
 | `PageUp` / `PageDown` | Fast scroll game list or detail view |
-| `Enter` | Open game details (team banners, win probability bar & sparkline, linescore by period, team stats, leaders, and scoring plays) |
+| `Enter` | Open game/bout details (Tale of the Tape, fight stats, team banners, win prob bar, linescores) |
 | `v` | Toggle card **grid** vs compact **list** view |
-| `l` | Cycle status filters: **all** → **live** → **fav** → **upsets** → **top 25** |
-| `o` | Open **Conference / Division** filter modal (B1G, SEC, ACC, Big 12, NFC/AFC North/South/East/West, etc.) |
-| `R` | Open side-by-side Poll Rankings (AP Top 25 + AFCA Coaches Poll for CFB & CBB) |
+| `l` | Cycle status filters: **all** → **live** → **final** → **fav** → **upsets** → **top 25** |
+| `o` | Open **Conference / Division / Weight Class** filter modal (B1G, SEC, AFC/NFC, Heavyweight, Welterweight, etc.) |
+| `R` | Open side-by-side Rankings (AP/Coaches Top 25 for CFB/CBB; Men's & Women's P4P for UFC) |
 | `T` | Open side-by-side or tabbed Conference / Division Standings tables |
 | `N` | Open League News headlines (`Enter` to read story, `o` to open in browser) |
-| `a` / `!` (or `1` in single-league mode) | Toggle star on **away** team as favorite |
-| `h` / `@` (or `2` in single-league mode) | Toggle star on **home** team as favorite |
-| `c` / `C` | Copy selected game (`c`) or full board (`C`) formatted for Discord |
+| `a` / `!` (or `1` in single-league mode) | Toggle star on **away / blue corner** as favorite |
+| `h` / `@` (or `2` in single-league mode) | Toggle star on **home / red corner** as favorite |
+| `c` / `C` | Copy selected game/bout (`c`) or full board (`C`) formatted for Discord |
 | `g` | Cycle glyph styles: **nerd** → **unicode** → **emoji** → **ascii** |
 | `r` | Force refresh data immediately |
 | `Esc` | Return to scoreboard from detail / rankings / standings / news / help |
