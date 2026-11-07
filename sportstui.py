@@ -3371,15 +3371,22 @@ class App:
             self.say("vegastui launcher not found")
             return
         cmd[0] = exe
+        curses.def_prog_mode()
         curses.endwin()
         try:
             subprocess.run(cmd)
         except Exception:
             pass
         finally:
+            curses.reset_prog_mode()
+            try:
+                curses.curs_set(0)
+            except Exception:
+                pass
             self.scr.clear()
             self.init_colors()
-            self.refresh_data()
+            self.cache.clear()
+            self.scr.refresh()
 
     # -- input -------------------------------------------------------------
     def handle(self, ch):
