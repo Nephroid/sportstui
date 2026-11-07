@@ -1517,7 +1517,7 @@ class TestSportstui(unittest.TestCase):
         self.assertIsInstance(a_rz, int)
         self.assertIsInstance(a_up, int)
 
-        # 2. Card border in red zone uses breathing attribute and heavy border
+        # 2. Card border in red zone uses marquee in marquee mode
         game_rz = {
             "id": "1", "state": "in", "short": "Q4 02:15", "league": "nfl",
             "away": {"id": "1", "name": "Packers", "abbr": "GB", "color": "203731", "score": "20", "score_int": 20},
@@ -1525,16 +1525,55 @@ class TestSportstui(unittest.TestCase):
             "situation": {"red_zone": True, "down_dist": "1st & Goal at DET 4"},
         }
         captured_boxes = []
-        app.draw_box = lambda y, x, h, w, attr, title="", heavy=False: captured_boxes.append((attr, title, heavy))
+        app.draw_box = lambda y, x, h, w, attr, title="", heavy=False, marquee=None: captured_boxes.append((attr, title, heavy, marquee))
         app.put = lambda *a, **kw: None
         app.fill_line = lambda *a, **kw: None
         app.segment = lambda *a, **kw: None
 
+        app.anim_mode = "marquee"
         app.draw_card(game_rz, 0, 0, 42, False)
         self.assertEqual(len(captured_boxes), 1)
-        attr, title, heavy = captured_boxes[0]
+        attr, title, heavy, marquee = captured_boxes[0]
         self.assertTrue(heavy)
         self.assertIn("RED ZONE", title)
+        self.assertEqual(marquee, "red_zone")
+
+        # 3. Card border in breathing mode passes marquee=None
+        captured_boxes.clear()
+        app.anim_mode = "breathing"
+        app.draw_card(game_rz, 0, 0, 42, False)
+        self.assertEqual(len(captured_boxes), 1)
+        attr, title, heavy, marquee = captured_boxes[0]
+        self.assertTrue(heavy)
+        self.assertIsNone(marquee)
+
+        # 4. Off mode returns static attribute without crashing
+        app.anim_mode = "off"
+        attr_off = app.breathing_attr("red_zone")
+        self.assertIsInstance(attr_off, int)
+
+        # 5. Hotkey 'm' cycles modes: marquee -> breathing -> off -> marquee
+        app.anim_mode = "marquee"
+        app.handle(ord("m"))
+        self.assertEqual(app.anim_mode, "breathing")
+        app.handle(ord("m"))
+        self.assertEqual(app.anim_mode, "off")
+        app.handle(ord("m"))
+        self.assertEqual(app.anim_mode, "marquee")
+
+        # 6. Real draw_box with marquee renders bulbs and corners
+        real_app = sportstui.App(None, opts)
+        real_app.anim_mode = "marquee"
+        segments_drawn = []
+        puts_drawn = []
+        real_app.segment = lambda y, x, segs, w: segments_drawn.append((y, x, segs, w))
+        real_app.put = lambda y, x, ch, attr=0, **kw: puts_drawn.append((y, x, ch, attr))
+        real_app.draw_box(0, 0, 5, 42, 0, title="⚑ RED ZONE", heavy=True, marquee="red_zone")
+        self.assertEqual(len(segments_drawn), 2)  # top edge and bottom edge
+        self.assertEqual(len(puts_drawn), 6)      # 3 left edge + 3 right edge cells
+        top_segs = segments_drawn[0][2]
+        self.assertEqual(top_segs[0][0], "┏")    # heavy top-left corner
+        self.assertTrue(any("●" in txt for txt, _ in top_segs))  # marquee bulb present
 
 
 if __name__ == "__main__":

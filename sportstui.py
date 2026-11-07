@@ -1763,6 +1763,7 @@ class App:
             except (ValueError, TypeError):
                 self.forced_cols = None
         self.glyphs = opts.glyphs or self.cfg.get("glyphs") or "nerd"
+        self.anim_mode = getattr(opts, "anim", None) or self.cfg.get("animation") or "marquee"
         self.view = "board"          # board | extra | detail | news | help | group_picker
         self.filter = "all"
         self.group_filter = None     # conference or division ID/key
@@ -1805,6 +1806,7 @@ class App:
             "league": self.league_key,
             "layout": self.layout,
             "glyphs": self.glyphs,
+            "animation": self.anim_mode,
             "favorites": sorted(self.favs),
         }
         if self.forced_cols is not None:
@@ -1925,11 +1927,19 @@ class App:
         if not self.colours:
             return curses.A_BOLD
 
+        has_256 = self.colours and getattr(curses, "COLORS", 0) >= 256
+        if getattr(self, "anim_mode", "marquee") == "off":
+            if kind == "red_zone":
+                return self.pair(196) | curses.A_BOLD if has_256 else (self.pair(getattr(curses, "COLOR_RED", 1)) | curses.A_BOLD)
+            if kind == "upset":
+                return self.pair(214) | curses.A_BOLD if has_256 else (self.pair(getattr(curses, "COLOR_YELLOW", 3)) | curses.A_BOLD)
+            return self.attr("accent")
+
         # 4-stage breathing pulse cycle (~1.25s per breath, ~312ms per stage)
         phase = int(time.time() * 3.2) % 4
 
         if kind == "red_zone":
-            if curses.COLORS >= 256:
+            if has_256:
                 # 160: crimson -> 196: neon red -> 203: coral flare -> 196: neon red
                 ramp = [160, 196, 203, 196]
                 col = ramp[phase]
@@ -1938,10 +1948,10 @@ class App:
                     attr |= curses.A_BOLD
                 return attr
             else:
-                return self.pair(curses.COLOR_WHITE if phase == 2 else curses.COLOR_RED) | curses.A_BOLD
+                return self.pair(getattr(curses, "COLOR_WHITE", 7) if phase == 2 else getattr(curses, "COLOR_RED", 1)) | curses.A_BOLD
 
         if kind == "upset":
-            if curses.COLORS >= 256:
+            if has_256:
                 # 178: warm amber -> 214: rich gold -> 226: electric yellow -> 214: rich gold
                 ramp = [178, 214, 226, 214]
                 col = ramp[phase]
@@ -1950,7 +1960,7 @@ class App:
                     attr |= curses.A_BOLD
                 return attr
             else:
-                return self.pair(curses.COLOR_WHITE if phase == 2 else curses.COLOR_YELLOW) | curses.A_BOLD
+                return self.pair(getattr(curses, "COLOR_WHITE", 7) if phase == 2 else getattr(curses, "COLOR_YELLOW", 3)) | curses.A_BOLD
 
         return self.attr("accent")
 
@@ -2144,7 +2154,7 @@ class App:
         except curses.error:
             pass
 
-    def draw_box(self, y, x, height, width, border_attr, title="", heavy=False):
+    def draw_box(self, y, x, height, width, border_attr, title="", heavy=False, marquee=None):
         g = self.g()
         tl = g["tl_heavy"] if heavy else g["tl_round"]
         tr = g["tr_heavy"] if heavy else g["tr_round"]
@@ -2153,18 +2163,124 @@ class App:
         hz = g["h_heavy"] if heavy else g["h"]
         vt = g["v_heavy"] if heavy else g["v"]
         inner = max(0, width - 2)
+
+        # Standard non-marquee rendering or if marquee is not active
+        if not marquee or getattr(self, "anim_mode", "marquee") != "marquee":
+            if title:
+                title_clipped = clip_to_width(title, max(0, inner - 4))
+                t_str = " %s " % title_clipped
+                rem_hz = max(0, inner - 1 - str_width(t_str))
+                top_bar = tl + hz + t_str + hz * rem_hz + tr
+            else:
+                top_bar = tl + hz * inner + tr
+            self.put(y, x, top_bar, border_attr, width=width)
+            for row in range(1, height - 1):
+                self.put(y + row, x, vt, border_attr)
+                self.put(y + row, x + width - 1, vt, border_attr)
+            self.put(y + height - 1, x, bl + hz * inner + br, border_attr, width=width)
+            return
+
+        # Vegas Marquee Chaser Mode
+        has_256 = self.colours and getattr(curses, "COLORS", 0) >= 256
+        if marquee == "red_zone":
+            base_attr = self.pair(196) | curses.A_BOLD if has_256 else (self.pair(getattr(curses, "COLOR_RED", 1)) | curses.A_BOLD)
+            bulb_attr = self.pair(231) | curses.A_BOLD if has_256 else (self.pair(getattr(curses, "COLOR_WHITE", 7)) | curses.A_BOLD)
+        else:  # upset
+            base_attr = self.pair(214) | curses.A_BOLD if has_256 else (self.pair(getattr(curses, "COLOR_YELLOW", 3)) | curses.A_BOLD)
+            bulb_attr = self.pair(231) | curses.A_BOLD if has_256 else (self.pair(getattr(curses, "COLOR_WHITE", 7)) | curses.A_BOLD)
+
+        bulb_char = "*" if getattr(self, "glyphs", "unicode") == "ascii" else "●"
+
+        # Clockwise perimeter shift at 5 FPS
+        offset = int(time.time() * 5.0) % 4
+
+        # 1. Top Edge:
+        top_segs = [(tl, base_attr)]
+        t_str = ""
+        t_w = 0
         if title:
             title_clipped = clip_to_width(title, max(0, inner - 4))
             t_str = " %s " % title_clipped
-            rem_hz = max(0, inner - 1 - str_width(t_str))
-            top_bar = tl + hz + t_str + hz * rem_hz + tr
+            t_w = str_width(t_str)
+
+        if t_w > 0:
+            # Col 1: spacer or bulb
+            is_bulb = (0 - offset) % 4 == 0
+            top_segs.append((bulb_char if is_bulb else hz, bulb_attr if is_bulb else base_attr))
+            top_segs.append((t_str, border_attr))
+            cur_txt = ""
+            cur_attr = None
+            for col in range(2 + t_w, width - 1):
+                d = col - 1
+                is_bulb = (d - offset) % 4 == 0
+                ch = bulb_char if is_bulb else hz
+                attr = bulb_attr if is_bulb else base_attr
+                if attr == cur_attr:
+                    cur_txt += ch
+                else:
+                    if cur_txt:
+                        top_segs.append((cur_txt, cur_attr))
+                    cur_txt = ch
+                    cur_attr = attr
+            if cur_txt:
+                top_segs.append((cur_txt, cur_attr))
         else:
-            top_bar = tl + hz * inner + tr
-        self.put(y, x, top_bar, border_attr, width=width)
-        for row in range(1, height - 1):
-            self.put(y + row, x, vt, border_attr)
-            self.put(y + row, x + width - 1, vt, border_attr)
-        self.put(y + height - 1, x, bl + hz * inner + br, border_attr, width=width)
+            cur_txt = ""
+            cur_attr = None
+            for col in range(1, width - 1):
+                d = col - 1
+                is_bulb = (d - offset) % 4 == 0
+                ch = bulb_char if is_bulb else hz
+                attr = bulb_attr if is_bulb else base_attr
+                if attr == cur_attr:
+                    cur_txt += ch
+                else:
+                    if cur_txt:
+                        top_segs.append((cur_txt, cur_attr))
+                    cur_txt = ch
+                    cur_attr = attr
+            if cur_txt:
+                top_segs.append((cur_txt, cur_attr))
+
+        top_segs.append((tr, base_attr))
+        self.segment(y, x, top_segs, width)
+
+        # 2. Right Edge:
+        for r in range(1, height - 1):
+            d = (width - 2) + (r - 1)
+            is_bulb = (d - offset) % 4 == 0
+            ch = bulb_char if is_bulb else vt
+            attr = bulb_attr if is_bulb else base_attr
+            self.put(y + r, x + width - 1, ch, attr)
+
+        # 3. Bottom Edge:
+        bot_segs = [(bl, base_attr)]
+        cur_txt = ""
+        cur_attr = None
+        for col in range(1, width - 1):
+            d = (width - 2) + (height - 2) + (width - 2 - col)
+            is_bulb = (d - offset) % 4 == 0
+            ch = bulb_char if is_bulb else hz
+            attr = bulb_attr if is_bulb else base_attr
+            if attr == cur_attr:
+                cur_txt += ch
+            else:
+                if cur_txt:
+                    bot_segs.append((cur_txt, cur_attr))
+                cur_txt = ch
+                cur_attr = attr
+        if cur_txt:
+            bot_segs.append((cur_txt, cur_attr))
+        bot_segs.append((br, base_attr))
+        self.segment(y + height - 1, x, bot_segs, width)
+
+        # 4. Left Edge:
+        for r in range(1, height - 1):
+            d = 2 * (width - 2) + (height - 2) + (height - 2 - r)
+            is_bulb = (d - offset) % 4 == 0
+            ch = bulb_char if is_bulb else vt
+            attr = bulb_attr if is_bulb else base_attr
+            self.put(y + r, x, ch, attr)
 
     # -- chrome ------------------------------------------------------------
     def draw(self):
@@ -2324,6 +2440,7 @@ class App:
                 ("N", "News"),
                 ("c", "Copy"),
                 ("$", "Vegas"),
+                ("m", "Anim"),
             ]
             if not self.only:
                 items.append(("1-%d" % len(LEAGUES), "League"))
@@ -2697,6 +2814,9 @@ class App:
         title_str = " ".join(titles)
 
         heavy = bool(selected or up or red_zone or game.get("rivalry"))
+        alert_kind = "red_zone" if red_zone else ("upset" if up else None)
+        box_marquee = alert_kind if (alert_kind and getattr(self, "anim_mode", "marquee") == "marquee") else None
+
         if selected:
             if red_zone:
                 phase = int(time.time() * 3.2) % 4
@@ -2717,7 +2837,10 @@ class App:
         else:
             border_attr = self.attr("dim")
 
-        self.draw_box(y, x, 5, cw, border_attr, title=title_str, heavy=heavy)
+        if box_marquee:
+            self.draw_box(y, x, 5, cw, border_attr, title=title_str, heavy=heavy, marquee=box_marquee)
+        else:
+            self.draw_box(y, x, 5, cw, border_attr, title=title_str, heavy=heavy)
 
         # Away and Home full-bleed team color rows
         aw_lead = game["state"] != "pre" and away.get("score_int", 0) > home.get("score_int", 0)
@@ -3275,6 +3398,7 @@ class App:
             ("  a / h (or ! / @)    Star / unstar away/blue or home/red corner as favorite", "base"),
             ("  c / C               Copy selected game (c) or whole board (C) for Discord", "base"),
             ("  $ / B               Launch Vegas Sportsbook board (vegastui)", "base"),
+            ("  m                   Cycle alert animation: marquee / breathing / off", "base"),
             ("  g                   Cycle icon set: nerd / unicode / emoji / ascii", "base"),
             ("  r                   Force refresh immediately", "base"),
             ("  Esc                 Back to scoreboard", "base"),
@@ -3455,6 +3579,13 @@ class App:
             self.glyphs = order[(order.index(self.glyphs) + 1) % len(order)] if self.glyphs in order else "unicode"
             self.save_config()
             self.say("glyphs: %s" % self.glyphs)
+            return True
+        if ch in (ord("m"), ord("M")):
+            modes = ["marquee", "breathing", "off"]
+            cur = getattr(self, "anim_mode", "marquee")
+            self.anim_mode = modes[(modes.index(cur) + 1) % len(modes)] if cur in modes else "marquee"
+            self.save_config()
+            self.say("animation: %s" % self.anim_mode)
             return True
 
         if self.view == "help":
@@ -3848,6 +3979,8 @@ def build_parser(prog="sportstui"):
     parser.add_argument("--layout", choices=["grid", "list"])
     parser.add_argument("--cols", "-c", type=int, help="number of grid columns (default: auto reflow)")
     parser.add_argument("--glyphs", choices=list(GLYPHS))
+    parser.add_argument("--anim", "--animation", choices=["marquee", "breathing", "off"],
+                        help="alert card border animation style: marquee, breathing, or off (default: marquee)")
     parser.add_argument("--plain", action="store_true", help="print the board and exit")
     parser.add_argument("--version", action="version", version="%s %s" % (prog, VERSION))
     return parser
