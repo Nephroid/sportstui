@@ -37,8 +37,8 @@ import urllib.request
 import webbrowser
 from zoneinfo import ZoneInfo
 
-VERSION = "1.3.0"
-UA = "sportstui/1.3 (terminal scoreboard)"
+VERSION = "1.3.1"
+UA = "sportstui/1.3.1 (terminal scoreboard)"
 SITE = "https://site.api.espn.com/apis/site/v2/sports"
 CORE = "https://site.api.espn.com/apis/v2/sports"
 BOXERBOOK_BASE = "https://boxerbook.com/v1"
@@ -1749,13 +1749,14 @@ def strip_html(raw_html):
 # --------------------------------------------------------------------------
 
 class Fetcher:
-    def __init__(self):
+    def __init__(self, num_workers=3):
         self.req = queue.Queue()
         self.res = queue.Queue()
         self.inflight = set()
         self.lock = threading.Lock()
-        t = threading.Thread(target=self._run, daemon=True)
-        t.start()
+        for _ in range(num_workers):
+            t = threading.Thread(target=self._run, daemon=True)
+            t.start()
 
     def request(self, key, fn):
         with self.lock:
@@ -2022,6 +2023,7 @@ class App:
         self.league_key = self.only or opts.league or self.cfg.get("league") or "cfb"
         if self.league_key not in BY_KEY:
             self.league_key = "cfb"
+        self.prev_league_key = None
         self.date = opts.date or today()
         self.week = getattr(opts, "week", None)
         self.layout = opts.layout or self.cfg.get("layout") or "grid"
@@ -2399,10 +2401,10 @@ class App:
             clk = game.get("clock") or ""
             if pl and clk and game["league"] != "mlb":
                 return "%s %s %s" % (g["live"], pl, clk)
-            return "%s %s" % (g["live"], game["short"] or game["detail"] or "Live")
+            return "%s %s" % (g["live"], game.get("short") or game.get("detail") or "Live")
         if game["state"] == "post":
-            ot = "/OT" if game.get("is_overtime") and "ot" not in (game["short"] or "").lower() else ""
-            base = game["short"] or "Final"
+            ot = "/OT" if game.get("is_overtime") and "ot" not in (game.get("short") or "").lower() else ""
+            base = game.get("short") or "Final"
             return "%s %s%s" % (g["final"], base, ot)
         if game.get("status_name") not in ("STATUS_SCHEDULED", None, ""):
             return "%s %s" % (g["pregame"], game["short"] or game["detail"])
@@ -2411,13 +2413,13 @@ class App:
     def extra_text(self, game):
         if game.get("is_combat"):
             if game["state"] == "pre":
-                sp = spread_text(game["odds"])
+                sp = spread_text(game.get("odds"))
                 return sp if sp else (game.get("tv") or "").split(",")[0]
             if game["state"] == "post":
                 return (game.get("venue") or "").split(",")[0]
             return ""
         if game["state"] == "pre":
-            sp = spread_text(game["odds"])
+            sp = spread_text(game.get("odds"))
             return sp if sp else (game.get("tv") or "").split(",")[0]
         if game["state"] == "in":
             sit = game.get("situation")
@@ -3670,9 +3672,13 @@ class App:
                 else:
                     t_disp = "%-4s %s" % (row["abbr"][:4], t_name)
                 t_label = "%s%s" % (star, t_disp)
+                target_w = team_w - 2
+                clipped = clip_to_width(t_label, target_w)
+                pad = " " * max(0, target_w - str_width(clipped))
+                cell_text = " " + clipped + pad + " "
                 segs = [
                     (" %2d " % rank_num, self.attr("dim")),
-                    (" %-*s " % (team_w - 2, t_label[:team_w - 2]), t_bar),
+                    (cell_text, t_bar),
                 ]
                 for k, _ in cols:
                     val = str(row["stats"].get(k) or "-")
@@ -3707,15 +3713,19 @@ class App:
         # 1. Top Full-Bleed Team Banners (matching detail.png)
         aw_badge = f"  [{away_st['badge']}]" if (away_st and away_st.get("badge")) else ""
         hm_badge = f"  [{home_st['badge']}]" if (home_st and home_st.get("badge")) else ""
-        aw_len = len(away["full"]) + len(away.get("record", "")) + len(aw_badge)
-        hm_len = len(home["full"]) + len(home.get("record", "")) + len(hm_badge)
+        aw_full = away.get("full") or away.get("name") or away.get("abbr") or ""
+        hm_full = home.get("full") or home.get("name") or home.get("abbr") or ""
+        aw_len = len(aw_full) + len(away.get("record") or "") + len(aw_badge)
+        hm_len = len(hm_full) + len(home.get("record") or "") + len(hm_badge)
         banner_w = min(width - 4, max(36, max(aw_len, hm_len) + 18))
         live = game["state"] == "in"
         sit = game.get("situation") if live else None
         for i, (side, prefix, is_lead, side_st) in enumerate(((away, ("[BLU] " if is_combat else ""), aw_lead, away_st), (home, ("[RED] " if is_combat else "@ "), hm_lead, home_st))):
-            rk = ("#%d " % side["rank"]) if side["rank"] else ""
+            rk = ("#%d " % side["rank"]) if side.get("rank") else ""
             badge = f"  [{side_st['badge']}]" if (side_st and side_st.get("badge")) else ""
-            left = " %s%s%s  %s%s" % (prefix, rk, side["full"], side["record"], badge)
+            s_name = side.get("full") or side.get("name") or side.get("abbr") or ""
+            s_rec = side.get("record") or ""
+            left = " %s%s%s  %s%s" % (prefix, rk, s_name, s_rec, badge)
             t_str = ""
             if live and sit:
                 rem = sit.get("away_timeouts" if i == 0 else "home_timeouts")
@@ -3739,7 +3749,7 @@ class App:
         y += 1
         loc = (data.get("location") if data else None) or game.get("venue") or ""
         tv = game.get("tv") or ""
-        sp = spread_text(game["odds"])
+        sp = spread_text(game.get("odds"))
         info_str = "  ·  ".join(x for x in (loc, tv, ("Line: " + sp) if sp else "") if x)
         if info_str:
             self.put(y, 2, info_str[:width - 4], self.attr("dim"))
@@ -3839,6 +3849,47 @@ class App:
                 row_segs.append(("".join("%4s" % (scores[i] if i < len(scores) else "-") for i in range(n_per)), self.attr("base")))
                 row_segs.append(("%5s" % side["score"], self.attr("base") | curses.A_BOLD))
                 vlines.append(row_segs)
+
+        # 3b. Team Stats comparison bars
+        tstats = data.get("team_stats") or {}
+        st_a = tstats.get(away["abbr"]) or {}
+        st_h = tstats.get(home["abbr"]) or {}
+        if st_a and st_h:
+            common_keys = [k for k in st_a if k in st_h]
+            if common_keys:
+                vlines.append([])
+                vlines.append([("Team Stats", self.attr("base") | curses.A_BOLD | curses.A_UNDERLINE)])
+                vlines.append([
+                    (" %-6s" % away["abbr"][:6], self.team_fg_attr(away["color"], bold=True)),
+                    (" " * 22, self.attr("base")),
+                    ("%6s" % home["abbr"][:6], self.team_fg_attr(home["color"], bold=True)),
+                ])
+                for k in common_keys[:6]:
+                    lbl_a, val_a = st_a[k]
+                    _, val_h = st_h[k]
+                    def _parse_val(v):
+                        try:
+                            clean = str(v).replace("%", "").split("-")[0].strip()
+                            return float(clean)
+                        except Exception:
+                            return 0.0
+                    fa, fh = _parse_val(val_a), _parse_val(val_h)
+                    tot = fa + fh
+                    bar_len = 16
+                    if tot > 0:
+                        fill_a = int(round((fa / tot) * bar_len))
+                        fill_h = bar_len - fill_a
+                    else:
+                        fill_a = fill_h = bar_len // 2
+                    bar_seg_a = g["bar_full"] * fill_a
+                    bar_seg_h = g["bar_full"] * fill_h
+                    vlines.append([
+                        ("%6s " % str(val_a)[:6], self.attr("base") | curses.A_BOLD),
+                        (bar_seg_a, self.team_fg_attr(away["color"], bold=True)),
+                        (bar_seg_h, self.team_fg_attr(home["color"], bold=True)),
+                        (" %-6s " % str(val_h)[:6], self.attr("base") | curses.A_BOLD),
+                        (lbl_a[:16], self.attr("dim")),
+                    ])
 
         # 4. League Standings
         if away_st or home_st:
@@ -4114,7 +4165,6 @@ class App:
         else:
             self.picker_sel = 0
         self.picker_scroll = max(0, self.picker_sel - 5)
-        self.scr.clear()
 
     def handle_group_picker(self, ch):
         options = self.get_group_options()
@@ -4128,18 +4178,16 @@ class App:
             self.group_name = None if gid == "all" else name
             self.view = "board"
             self.scroll = 0
-            self.scr.clear()
             self.say("Showing: %s" % (name if gid != "all" else "all"))
         elif ch in (27, ord("q"), ord("o")):
             self.view = "board"
-            self.scr.clear()
         return True
 
     # -- Discord copy ------------------------------------------------------
     def copy_game_discord(self, game):
         aw, hm = game["away"], game["home"]
         if game["state"] == "pre":
-            sp = spread_text(game["odds"])
+            sp = spread_text(game.get("odds"))
             line = "%s (%s) @ %s (%s) · %s%s" % (
                 aw["abbr"], aw["record"], hm["abbr"], hm["record"],
                 self.kickoff_str(game["start"]), (" · " + sp) if sp else "")
@@ -4177,13 +4225,19 @@ class App:
             web_url = art.get("web_url") or ""
             body = art.get("description") or ""
             if art.get("story_url"):
-                try:
-                    st_data = fetch_json(art["story_url"], timeout=6)
-                    raw_body = dig(st_data, "headlines", 0, "story") or ""
-                    if raw_body:
-                        body = strip_html(raw_body)
-                except Exception:  # noqa: BLE001
-                    pass
+                story_key = "story:" + art["story_url"]
+                cached_body = self.cache_get(story_key)
+                if cached_body:
+                    body = cached_body
+                else:
+                    try:
+                        st_data = fetch_json(art["story_url"], timeout=6)
+                        raw_body = dig(st_data, "headlines", 0, "story") or ""
+                        if raw_body:
+                            body = strip_html(raw_body)
+                            self.cache[story_key] = (time.time(), body, None)
+                    except Exception:  # noqa: BLE001
+                        pass
         else:
             self.say("No article to copy")
             return
@@ -4244,11 +4298,12 @@ class App:
             elif self.view in ("extra", "detail", "news", "help", "group_picker"):
                 self.view = "board"
                 self.scroll = 0
-            self.scr.clear()
+                if getattr(self, "prev_league_key", None):
+                    self.league_key = self.prev_league_key
+                    self.prev_league_key = None
             return True
         if ch == ord("?"):
             self.view = "help" if self.view != "help" else "board"
-            self.scr.clear()
             return True
         if ch == ord("r"):
             self.cache.clear()
@@ -4284,7 +4339,7 @@ class App:
         return True
 
     def handle_board(self, ch):
-        _, w = self.scr.getmaxyx()
+        _, w = self.scr.getmaxyx() if self.scr else (24, 80)
         games = self.cache_get(self.board_key()) or []
         rows = self.visible(games)
         cols = self.grid_cols(w) if self.layout == "grid" else 1
@@ -4320,48 +4375,40 @@ class App:
                 self.detail_game = rows[self.selected_index(rows)]
                 self.detail_scroll = 0
                 self.view = "detail"
-                self.scr.clear()
         elif ch == ord("["):
             self.week = None
             self.date -= dt.timedelta(days=1)
             self.scroll = 0
-            self.scr.clear()
         elif ch == ord("]"):
             self.week = None
             self.date += dt.timedelta(days=1)
             self.scroll = 0
-            self.scr.clear()
         elif ch in (ord("w"), ord("W")) and self.lg()["key"] in ("cfb", "nfl"):
             cur_week = self.week or (games[0].get("week") if games else 1)
             delta = 1 if ch == ord("w") else -1
             self.week = max(1, cur_week + delta)
             self.date += dt.timedelta(weeks=delta)
             self.scroll = 0
-            self.scr.clear()
             self.say("Week %d" % self.week)
         elif ch == ord("t"):
             self.week = None
             self.date = today()
             self.scroll = 0
-            self.scr.clear()
         elif ch == ord("v"):
             self.layout = "list" if self.layout == "grid" else "grid"
             self.scroll = 0
-            self.scr.clear()
             self.save_config()
         elif ch == ord("l"):
             options = ["all", "live", "live-exciting", "exciting", "final", "fav", "upsets"] + (["top25"] if self.lg()["poll"] else [])
             self.filter = options[(options.index(self.filter) + 1) % len(options)] if self.filter in options else "all"
             self.scroll = 0
-            self.scr.clear()
             self.say("filter: %s" % self.filter)
         elif ch == ord("e"):
             cycle = ["all", "live-exciting", "exciting"]
             self.filter = cycle[(cycle.index(self.filter) + 1) % len(cycle)] if self.filter in cycle else "live-exciting"
             self.scroll = 0
-            self.scr.clear()
             if self.filter == "live-exciting":
-                live_exc_n = sum(1 for gm in games if gm["state"] == "in" and evaluate_excitement(gm)["qualifies"])
+                live_exc_n = sum(1 for gm in games if gm["state"] == "in" and evaluate_excitement(gm, self.hated)["qualifies"])
                 if live_exc_n == 0:
                     self.say("filter: live-exciting (0 live thrillers — press 'e' again for all exciting)")
                 else:
@@ -4373,7 +4420,6 @@ class App:
         elif ch == ord("E"):
             self.filter = "all" if self.filter == "live-exciting" else "live-exciting"
             self.scroll = 0
-            self.scr.clear()
             self.say("filter: live-exciting (live thrillers only)" if self.filter == "live-exciting" else "filter: all")
         elif ch == ord("o"):
             self.open_group_picker()
@@ -4389,7 +4435,6 @@ class App:
             self.view = "news"
             self.news_sel = self.news_scroll = 0
             self.news_story = None
-            self.scr.clear()
         elif ch in (ord("a"), ord("!")) and rows:
             cur_gm = rows[self.selected_index(rows)]
             self.toggle_fav(cur_gm["away"], cur_gm)
@@ -4427,11 +4472,17 @@ class App:
         elif ch == ord("R"):
             if self.extra_kind == "ranks":
                 self.view = "board"
+                if getattr(self, "prev_league_key", None):
+                    self.league_key = self.prev_league_key
+                    self.prev_league_key = None
             elif self.lg()["poll"]:
                 self.open_extra("ranks")
         elif ch == ord("T"):
             if self.extra_kind == "stand":
                 self.view = "board"
+                if getattr(self, "prev_league_key", None):
+                    self.league_key = self.prev_league_key
+                    self.prev_league_key = None
             else:
                 self.open_extra("stand")
         elif ch in (curses.KEY_UP, ord("k")):
@@ -4492,13 +4543,19 @@ class App:
             art = items[self.news_sel]
             body = art.get("description") or "No preview text available. Press 'o' to open the full article in your browser."
             if art.get("story_url"):
-                try:
-                    st_data = fetch_json(art["story_url"], timeout=6)
-                    raw_body = dig(st_data, "headlines", 0, "story") or ""
-                    if raw_body:
-                        body = strip_html(raw_body)
-                except Exception:  # noqa: BLE001
-                    pass
+                story_key = "story:" + art["story_url"]
+                cached_body = self.cache_get(story_key)
+                if cached_body:
+                    body = cached_body
+                else:
+                    try:
+                        st_data = fetch_json(art["story_url"], timeout=6)
+                        raw_body = dig(st_data, "headlines", 0, "story") or ""
+                        if raw_body:
+                            body = strip_html(raw_body)
+                            self.cache[story_key] = (time.time(), body, None)
+                    except Exception:  # noqa: BLE001
+                        pass
             self.news_story = (art["headline"], body, art.get("web_url") or "")
             self.news_scroll = 0
         return True
@@ -4515,8 +4572,6 @@ class App:
         self.extra_tab = self.extra_group = self.extra_sel = self.extra_scroll = 0
         self.view = "board"
         self.filter = "all"
-        if self.scr:
-            self.scr.clear()
         self.save_config()
 
     def move(self, delta, rows):
@@ -4541,8 +4596,6 @@ class App:
         else:
             self.favs.add(key)
             self.say("Starred %s %s %s" % (lg.upper(), side["abbr"], g["star"]))
-        if self.scr:
-            self.scr.clear()
         self.save_config()
 
     toggle_watchlist = toggle_fav
@@ -4553,6 +4606,8 @@ class App:
         self.extra_sel = self.extra_scroll = 0
         self.extra_group = 0
         self.extra_tab = 0
+        if self.league_key == "all":
+            self.prev_league_key = "all"
         if kind == "stand":
             target_gm = self.detail_game
             if not target_gm:
@@ -4577,8 +4632,6 @@ class App:
                             if grp["name"] == side_st["group"]:
                                 self.extra_group = gi
                                 break
-        if self.scr:
-            self.scr.clear()
 
 
 # --------------------------------------------------------------------------

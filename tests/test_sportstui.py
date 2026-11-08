@@ -13,10 +13,12 @@ from pathlib import Path
 REPO_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_DIR))
 
-import importlib.machinery
+import importlib.util
 
-loader = importlib.machinery.SourceFileLoader("sportstui", str(REPO_DIR / "sportstui.py"))
-sportstui = loader.load_module()
+spec = importlib.util.spec_from_file_location("sportstui", str(REPO_DIR / "sportstui.py"))
+sportstui = importlib.util.module_from_spec(spec)
+sys.modules["sportstui"] = sportstui
+spec.loader.exec_module(sportstui)
 
 
 class TestSportstui(unittest.TestCase):
@@ -786,7 +788,7 @@ class TestSportstui(unittest.TestCase):
             "home": {"id": "2", "abbr": "HM", "name": "Home", "score": "3", "score_int": 3, "color": "FFFFFF", "rank": None, "record": "0-1"},
         }
         drawn_titles = []
-        def mock_draw_box(y, x, h, w, attr, title="", heavy=False):
+        def mock_draw_box(y, x, h, w, attr, title="", heavy=False, **kwargs):
             drawn_titles.append(title)
 
         app.put = lambda *args, **kwargs: None
@@ -1017,7 +1019,7 @@ class TestSportstui(unittest.TestCase):
 
         # Test draw_box captures weight class and title badge
         captured_titles = []
-        def mock_box(y, x, h, w, attr, title="", heavy=False):
+        def mock_box(y, x, h, w, attr, title="", heavy=False, **kwargs):
             captured_titles.append(title)
         app.put = lambda *args, **kwargs: None
         app.fill_line = lambda *args, **kwargs: None
@@ -1469,15 +1471,23 @@ class TestSportstui(unittest.TestCase):
 
         # 3. Filter options rotation in CFB (with poll: top25 present)
         app.league_key = "cfb"
-        cfb_options = ["all", "live", "final", "fav", "upsets"] + (["top25"] if app.lg()["poll"] else [])
-        self.assertIn("final", cfb_options)
-        self.assertEqual(cfb_options, ["all", "live", "final", "fav", "upsets", "top25"])
+        app.filter = "all"
+        cfb_expected_seq = ["live", "live-exciting", "exciting", "final", "fav", "upsets", "top25", "all"]
+        cfb_actual_seq = []
+        for _ in range(len(cfb_expected_seq)):
+            app.handle_board(ord("l"))
+            cfb_actual_seq.append(app.filter)
+        self.assertEqual(cfb_actual_seq, cfb_expected_seq)
 
         # 4. Filter options rotation in NFL (without poll)
         app.league_key = "nfl"
-        nfl_options = ["all", "live", "final", "fav", "upsets"] + (["top25"] if app.lg()["poll"] else [])
-        self.assertIn("final", nfl_options)
-        self.assertEqual(nfl_options, ["all", "live", "final", "fav", "upsets"])
+        app.filter = "all"
+        nfl_expected_seq = ["live", "live-exciting", "exciting", "final", "fav", "upsets", "all"]
+        nfl_actual_seq = []
+        for _ in range(len(nfl_expected_seq)):
+            app.handle_board(ord("l"))
+            nfl_actual_seq.append(app.filter)
+        self.assertEqual(nfl_actual_seq, nfl_expected_seq)
 
     def test_news_all_league_aggregation(self):
         from unittest.mock import patch
@@ -1557,7 +1567,7 @@ class TestSportstui(unittest.TestCase):
 
         # 3. Handle news input key 'c' while in reader and list
         import time
-        app.cache["news:cfb"] = (time.time(), [mock_art])
+        app.cache["news:cfb"] = (time.time(), [mock_art], None)
         app.league_key = "cfb"
         app.news_sel = 0
         app.news_story = None
@@ -2009,6 +2019,103 @@ class TestSportstui(unittest.TestCase):
         app.clamp_scroll()
         self.assertEqual(app.scroll, 0)
         self.assertEqual(app.detail_scroll, 0)
+
+    def test_draw_detail_team_stats_bars(self):
+        opts = sportstui.parse_args([])
+        app = sportstui.App(None, opts)
+        game = {
+            "id": "1", "league": "cfb", "state": "in", "short": "Q3 04:12", "detail": "Q3 04:12",
+            "odds": {}, "situation": {}, "start": None, "venue": "", "tv": "", "rivalry": None,
+            "away": {"abbr": "MSU", "name": "Spartans", "full": "Michigan State", "color": "18453B", "score": "14", "score_int": 14, "record": "8-2", "rank": None},
+            "home": {"abbr": "MICH", "name": "Wolverines", "full": "Michigan", "color": "00274C", "score": "10", "score_int": 10, "record": "7-3", "rank": None},
+        }
+        app.detail_game = game
+        mock_data = {
+            "linescores": {"away": [], "home": []},
+            "team_stats": {
+                "MSU": {"totalYards": ("Total Yards", "350")},
+                "MICH": {"totalYards": ("Total Yards", "280")},
+            },
+        }
+        app.cache["detail:cfb:1"] = (time.time(), mock_data, None)
+        drawn_segments = []
+        app.segment = lambda y, x, segs, w: drawn_segments.append(segs)
+        app.put = lambda *args, **kwargs: None
+        app.draw_detail(0, 40, 100)
+
+        # Verify that Team Stats header or stats bar appeared
+        found_stats = any(any("Total Yards" in text or "350" in text for text, _ in seg) for seg in drawn_segments)
+        self.assertTrue(found_stats, "Team stats comparison bar was not generated in draw_detail")
+
+    def test_e_hotkey_counts_hated_live_thrillers(self):
+        opts = sportstui.parse_args([])
+        app = sportstui.App(None, opts)
+        app.league_key = "cfb"
+        app.hated.add("cfb:SMU")
+        # Live SMU trailing by 14 in Q3 (triggers Schadenfreude excitement)
+        smu_trailing = {
+            "id": "100", "league": "cfb", "state": "in", "period": 3, "clock": "06:00", "start": None,
+            "away": {"id": "2567", "abbr": "SMU", "score_int": 14, "color": "CC0000"},
+            "home": {"id": "183", "abbr": "SYR", "score_int": 28, "color": "D44500"},
+        }
+        app.cache[app.board_key()] = (time.time(), [smu_trailing], None)
+        captured_notices = []
+        app.say = lambda msg: captured_notices.append(msg)
+        app.handle_board(ord("e"))
+        self.assertEqual(app.filter, "live-exciting")
+        self.assertTrue(any("1 live thriller" in m for m in captured_notices), f"Expected 1 live thriller in {captured_notices}")
+
+    def test_standings_emoji_star_alignment(self):
+        opts = sportstui.parse_args(["--glyphs", "emoji"])
+        app = sportstui.App(None, opts)
+        app.league_key = "cfb"
+        app.favs.add("cfb:MSU")
+
+        groups = [{
+            "name": "Big Ten",
+            "rows": [
+                {"abbr": "MSU", "team": "Michigan State", "color": "18453B", "stats": {"conf": "5-1", "overall": "8-2"}},
+                {"abbr": "ILL", "team": "Illinois", "color": "FF5F05", "stats": {"conf": "4-2", "overall": "7-3"}},
+            ],
+        }]
+
+        drawn_rows = []
+        app.segment = lambda y, x, segs, w: drawn_rows.append(segs)
+        app.put = lambda *args, **kwargs: None
+        app.draw_box = lambda *args, **kwargs: None
+        app.draw_standings(groups, 0, 20, 80)
+
+        # Team name cell is at segs[1][0]
+        # Starred team (MSU with ⭐) and unstarred team (ILL with ' ') must have identical str_width
+        self.assertGreaterEqual(len(drawn_rows), 2)
+        star_cell = drawn_rows[0][1][0]
+        unstar_cell = drawn_rows[1][1][0]
+        self.assertEqual(sportstui.str_width(star_cell), sportstui.str_width(unstar_cell))
+
+    def test_all_league_mode_extra_view_restores_all(self):
+        opts = sportstui.parse_args([])
+        app = sportstui.App(None, opts)
+        app.league_key = "all"
+
+        mock_cfb_gm = {
+            "id": "1", "league": "cfb", "state": "in",
+            "away": {"abbr": "MSU", "score_int": 7},
+            "home": {"abbr": "MICH", "score_int": 3},
+        }
+        app.detail_game = mock_cfb_gm
+        app.cache["stand:cfb"] = (time.time(), [{"name": "Big Ten", "rows": []}], None)
+
+        # Enter standings
+        app.open_extra("stand")
+        self.assertEqual(app.view, "extra")
+        self.assertEqual(app.league_key, "cfb")
+        self.assertEqual(app.prev_league_key, "all")
+
+        # Exit via Esc (27)
+        app.handle(27)
+        self.assertEqual(app.view, "board")
+        self.assertEqual(app.league_key, "all")
+        self.assertIsNone(app.prev_league_key)
 
 
 if __name__ == "__main__":
