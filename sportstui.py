@@ -2377,6 +2377,8 @@ class App:
                 ]
         if self.filter == "live":
             rows = [g for g in rows if g["state"] == "in"]
+        elif self.filter == "live-exciting":
+            rows = [g for g in rows if g["state"] == "in" and evaluate_excitement(g)["qualifies"]]
         elif self.filter == "exciting":
             rows = [g for g in rows if evaluate_excitement(g)["qualifies"]]
         elif self.filter in ("final", "completed"):
@@ -2388,7 +2390,7 @@ class App:
         elif self.filter == "upsets":
             rows = [g for g in rows if g.get("upset")]
         order = {"in": 0, "pre": 1, "post": 2}
-        if self.filter == "exciting":
+        if self.filter in ("exciting", "live-exciting"):
             rows.sort(key=lambda g: (
                 0 if self.game_fav(g) else 1,
                 -evaluate_excitement(g)["score"],
@@ -2791,7 +2793,14 @@ class App:
         note_str = " · ".join(notes)
 
         live_cnt = sum(1 for gm in games if gm["state"] == "in")
-        live_str = "%d live of %d" % (live_cnt, len(games)) if ent is not None else ""
+        live_exc_cnt = sum(1 for gm in games if gm["state"] == "in" and evaluate_excitement(gm)["qualifies"])
+        if ent is not None:
+            if live_exc_cnt > 0:
+                live_str = "%d live (%d %s exciting) of %d" % (live_cnt, live_exc_cnt, g["thriller"], len(games))
+            else:
+                live_str = "%d live of %d" % (live_cnt, len(games))
+        else:
+            live_str = ""
 
         parts = [health]
         if next_str:
@@ -2958,7 +2967,10 @@ class App:
             return
         rows = self.visible(games)
         if not rows:
-            self.put(top + 1, 2, "No games on the board (filter: %s). Press l to cycle filters or [ / ] to change date." % self.filter, self.attr("dim"))
+            if self.filter == "live-exciting":
+                self.put(top + 1, 2, "No live exciting games in progress right now. Press 'e' again for all exciting games, '1' for ALL sports, or 'l' to cycle filters.", self.attr("dim"))
+            else:
+                self.put(top + 1, 2, "No games on the board (filter: %s). Press l to cycle filters or [ / ] to change date." % self.filter, self.attr("dim"))
             return
         if self.layout == "grid":
             self.draw_grid(rows, top, height, width)
@@ -3162,7 +3174,7 @@ class App:
             segs.append((lbl, attr))
         exc = evaluate_excitement(game)
         has_special = bool(up or (live and sit and sit.get("red_zone")) or game.get("rivalry") or game.get("is_title"))
-        if self.filter == "exciting" and exc["qualifies"]:
+        if self.filter in ("exciting", "live-exciting") and exc["qualifies"]:
             thr_lbl = ("  %s %d" % (g["thriller"], exc["score"])) if has_special else ("  %s %d %s" % (g["thriller"], exc["score"], exc["badge"]))
             segs.append((thr_lbl, self.attr("accent") | curses.A_BOLD))
         elif exc["qualifies"] and exc["score"] >= 50 and not has_special:
@@ -3257,7 +3269,7 @@ class App:
                 titles.append("%s RIVALRY" % g["rivalry"])
         exc = evaluate_excitement(game)
         has_special = bool(up or red_zone or game.get("rivalry") or game.get("is_title"))
-        if self.filter == "exciting" and exc["qualifies"]:
+        if self.filter in ("exciting", "live-exciting") and exc["qualifies"]:
             if has_special:
                 titles.append("%s %d" % (g["thriller"], exc["score"]))
             else:
@@ -3268,7 +3280,7 @@ class App:
             titles.append("▸")
         title_str = " ".join(titles)
 
-        is_thriller = bool(exc["qualifies"] and (self.filter == "exciting" or exc["score"] >= 50))
+        is_thriller = bool(exc["qualifies"] and (self.filter in ("exciting", "live-exciting") or exc["score"] >= 50))
         heavy = bool(selected or up or red_zone or game.get("rivalry") or is_thriller)
         alert_kind = "red_zone" if red_zone else ("upset" if up else None)
         mode = getattr(self, "anim_mode", "hybrid")
@@ -3323,7 +3335,7 @@ class App:
                     pfx_items.append("%s %s" % (g["rivalry"], riv_name))
                 else:
                     pfx_items.append("%s RIVALRY" % g["rivalry"])
-            if self.filter == "exciting" and exc["qualifies"]:
+            if self.filter in ("exciting", "live-exciting") and exc["qualifies"]:
                 pfx_items.append("%s %d" % (g["thriller"], exc["score"]))
             alert_dict["pfx"] = " ".join(pfx_items)
             alert_dict["sfx"] = "▸" if selected else ""
@@ -3915,8 +3927,8 @@ class App:
             ("", "base"),
             ("DISPLAY & ACTIONS", "accent"),
             ("  v                   Toggle card grid vs compact list layout", "base"),
-            ("  l                   Filter: all / live / exciting / final / fav / upsets / top25", "base"),
-            ("  e                   Toggle Exciting Games filter (sorted by thriller score)", "base"),
+            ("  l                   Filter: all / live / live-exciting / exciting / final / fav / upsets / top25", "base"),
+            ("  e                   Cycle Exciting filter: live-exciting -> exciting (all) -> all", "base"),
             ("  o                   Filter by conference / division / weight class", "base"),
             ("  a / h (or ! / @)    Star / unstar away/blue or home/red corner as favorite", "base"),
             ("  c / C               Copy selected game (c) or whole board (C) for Discord", "base"),
@@ -4193,16 +4205,31 @@ class App:
             self.scr.clear()
             self.save_config()
         elif ch == ord("l"):
-            options = ["all", "live", "exciting", "final", "fav", "upsets"] + (["top25"] if self.lg()["poll"] else [])
+            options = ["all", "live", "live-exciting", "exciting", "final", "fav", "upsets"] + (["top25"] if self.lg()["poll"] else [])
             self.filter = options[(options.index(self.filter) + 1) % len(options)] if self.filter in options else "all"
             self.scroll = 0
             self.scr.clear()
             self.say("filter: %s" % self.filter)
-        elif ch in (ord("e"), ord("E")):
-            self.filter = "all" if self.filter == "exciting" else "exciting"
+        elif ch == ord("e"):
+            cycle = ["all", "live-exciting", "exciting"]
+            self.filter = cycle[(cycle.index(self.filter) + 1) % len(cycle)] if self.filter in cycle else "live-exciting"
             self.scroll = 0
             self.scr.clear()
-            self.say("filter: exciting (thrillers)" if self.filter == "exciting" else "filter: all")
+            if self.filter == "live-exciting":
+                live_exc_n = sum(1 for gm in games if gm["state"] == "in" and evaluate_excitement(gm)["qualifies"])
+                if live_exc_n == 0:
+                    self.say("filter: live-exciting (0 live thrillers — press 'e' again for all exciting)")
+                else:
+                    self.say("filter: live-exciting (%d live thriller%s)" % (live_exc_n, "" if live_exc_n == 1 else "s"))
+            elif self.filter == "exciting":
+                self.say("filter: exciting (all thrillers + marquee games)")
+            else:
+                self.say("filter: all")
+        elif ch == ord("E"):
+            self.filter = "all" if self.filter == "live-exciting" else "live-exciting"
+            self.scroll = 0
+            self.scr.clear()
+            self.say("filter: live-exciting (live thrillers only)" if self.filter == "live-exciting" else "filter: all")
         elif ch == ord("o"):
             self.open_group_picker()
         elif ch == ord("R"):
@@ -4505,8 +4532,8 @@ def build_parser(prog="sportstui"):
     parser.add_argument("--date", type=lambda s: dt.date.fromisoformat(s), help="YYYY-MM-DD")
     parser.add_argument("--week", type=int, help="start on week N (CFB / NFL only)")
     parser.add_argument("--layout", choices=["grid", "list"])
-    parser.add_argument("--filter", choices=["all", "live", "exciting", "final", "fav", "upsets", "top25"],
-                        help="initial game filter (e.g. exciting, live, upsets)")
+    parser.add_argument("--filter", choices=["all", "live", "live-exciting", "exciting", "final", "fav", "upsets", "top25"],
+                        help="initial game filter (e.g. live-exciting, exciting, live, upsets)")
     parser.add_argument("--cols", "-c", type=int, help="number of grid columns (default: auto reflow)")
     parser.add_argument("--glyphs", choices=list(GLYPHS))
     parser.add_argument("--anim", "--animation", choices=["hybrid", "strobe", "breathing", "off"],

@@ -1784,6 +1784,11 @@ class TestSportstui(unittest.TestCase):
         vis = app.visible(all_games)
         self.assertEqual([g["id"] for g in vis], ["5", "4", "3"])
 
+        # 7. Verify visible() with 'live-exciting' filter isolates strictly live thrillers
+        app.filter = "live-exciting"
+        vis_live_exc = app.visible(all_games)
+        self.assertEqual([g["id"] for g in vis_live_exc], ["5"])
+
 
 if __name__ == "__main__":
     unittest.main()
