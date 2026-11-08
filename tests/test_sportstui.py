@@ -2047,6 +2047,13 @@ class TestSportstui(unittest.TestCase):
         found_stats = any(any("Total Yards" in text or "350" in text for text, _ in seg) for seg in drawn_segments)
         self.assertTrue(found_stats, "Team stats comparison bar was not generated in draw_detail")
 
+        # Verify exact column alignment between header and row
+        hdr_row = next(s for s in drawn_segments if any("MSU" in t for t, _ in s) and any("MICH" in t for t, _ in s))
+        stat_row = next(s for s in drawn_segments if any("350" in t for t, _ in s))
+        hdr_w_before_home = sportstui.str_width(hdr_row[0][0]) + sportstui.str_width(hdr_row[1][0])
+        row_w_before_home = sportstui.str_width(stat_row[0][0]) + sportstui.str_width(stat_row[1][0]) + sportstui.str_width(stat_row[2][0])
+        self.assertEqual(hdr_w_before_home, row_w_before_home, "Header and stat row home column alignment mismatch")
+
     def test_e_hotkey_counts_hated_live_thrillers(self):
         opts = sportstui.parse_args([])
         app = sportstui.App(None, opts)

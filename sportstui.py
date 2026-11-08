@@ -3857,14 +3857,17 @@ class App:
         if st_a and st_h:
             common_keys = [k for k in st_a if k in st_h]
             if common_keys:
+                bar_len = 16
+                bar_ch = "█" if (self.glyphs == "emoji" or str_width(g["bar_full"]) != 1) else g["bar_full"]
+                bar_space = " " * bar_len
                 vlines.append([])
                 vlines.append([("Team Stats", self.attr("base") | curses.A_BOLD | curses.A_UNDERLINE)])
                 vlines.append([
-                    (" %-6s" % away["abbr"][:6], self.team_fg_attr(away["color"], bold=True)),
-                    (" " * 22, self.attr("base")),
-                    ("%6s" % home["abbr"][:6], self.team_fg_attr(home["color"], bold=True)),
+                    ("%6s " % away["abbr"][:6], self.team_fg_attr(away["color"], bold=True)),
+                    (bar_space, self.attr("base")),
+                    (" %-6s" % home["abbr"][:6], self.team_fg_attr(home["color"], bold=True)),
                 ])
-                for k in common_keys[:6]:
+                for k in common_keys[:8]:
                     lbl_a, val_a = st_a[k]
                     _, val_h = st_h[k]
                     def _parse_val(v):
@@ -3875,20 +3878,19 @@ class App:
                             return 0.0
                     fa, fh = _parse_val(val_a), _parse_val(val_h)
                     tot = fa + fh
-                    bar_len = 16
                     if tot > 0:
                         fill_a = int(round((fa / tot) * bar_len))
                         fill_h = bar_len - fill_a
                     else:
                         fill_a = fill_h = bar_len // 2
-                    bar_seg_a = g["bar_full"] * fill_a
-                    bar_seg_h = g["bar_full"] * fill_h
+                    bar_seg_a = bar_ch * fill_a
+                    bar_seg_h = bar_ch * fill_h
                     vlines.append([
                         ("%6s " % str(val_a)[:6], self.attr("base") | curses.A_BOLD),
                         (bar_seg_a, self.team_fg_attr(away["color"], bold=True)),
                         (bar_seg_h, self.team_fg_attr(home["color"], bold=True)),
-                        (" %-6s " % str(val_h)[:6], self.attr("base") | curses.A_BOLD),
-                        (lbl_a[:16], self.attr("dim")),
+                        (" %-6s  " % str(val_h)[:6], self.attr("base") | curses.A_BOLD),
+                        (lbl_a[:22], self.attr("dim")),
                     ])
 
         # 4. League Standings
