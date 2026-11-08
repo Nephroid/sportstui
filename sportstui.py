@@ -2876,8 +2876,11 @@ class App:
             elif self.view == "extra":
                 items.insert(1, ("←/→", "Switch Group/Poll"))
             elif self.view == "news":
-                items.insert(1, ("⏎", "Read"))
-                items.insert(2, ("o", "Browser"))
+                if self.news_story:
+                    items = [("esc/b", "Back"), ("o", "Browser"), ("c", "Copy"), ("q", "Quit")]
+                else:
+                    items.insert(1, ("⏎", "Read"))
+                    items.insert(2, ("o", "Browser"))
         elif self.view == "group_picker":
             items = [("esc", "Cancel"), ("⏎", "Select"), ("q", "Quit")]
         else:
@@ -3988,7 +3991,7 @@ class App:
             ("  Enter               Open game detail (linescore, stats, Tale of the Tape)", "base"),
             ("  R                   Poll & UFC rankings (AP / Coaches / P4P side-by-side)", "base"),
             ("  T                   Conference & Division standings tables", "base"),
-            ("  N                   League news feed (Enter to read, o for browser)", "base"),
+            ("  N                   League news feed (Enter read, o browser, c copy)", "base"),
             ("  [ / ]               Previous / next day", "base"),
             ("  w / W               Next / previous week (CFB & NFL)", "base"),
             ("  t                   Jump to today", "base"),
@@ -4122,6 +4125,37 @@ class App:
         lines.append("```")
         if copy_to_clipboard("\n".join(lines)):
             self.say("Copied board (%d games) for Discord" % min(len(rows), 35))
+        else:
+            self.say("Clipboard tool (wl-copy/xclip) not found")
+
+    def copy_news_article(self, art=None):
+        if self.news_story:
+            headline, body, web_url = self.news_story
+        elif art:
+            headline = art.get("headline") or ""
+            web_url = art.get("web_url") or ""
+            body = art.get("description") or ""
+            if art.get("story_url"):
+                try:
+                    st_data = fetch_json(art["story_url"], timeout=6)
+                    raw_body = dig(st_data, "headlines", 0, "story") or ""
+                    if raw_body:
+                        body = strip_html(raw_body)
+                except Exception:  # noqa: BLE001
+                    pass
+        else:
+            self.say("No article to copy")
+            return
+
+        lines = [headline]
+        if web_url:
+            lines.append(web_url)
+        if body:
+            lines.append("")
+            lines.append(body)
+        text = "\n".join(lines).strip()
+        if text and copy_to_clipboard(text):
+            self.say("Copied article to clipboard")
         else:
             self.say("Clipboard tool (wl-copy/xclip) not found")
 
@@ -4389,6 +4423,8 @@ class App:
             elif ch == ord("o") and self.news_story[2]:
                 webbrowser.open(self.news_story[2])
                 self.say("Opened story in browser")
+            elif ch in (ord("c"), ord("C")):
+                self.copy_news_article()
             elif ch in (curses.KEY_ENTER, 10, 13, ord("b")):
                 self.news_story = None
                 self.news_scroll = 0
@@ -4401,6 +4437,11 @@ class App:
         elif ch in (curses.KEY_DOWN, ord("j")):
             if items:
                 self.news_sel = min(len(items) - 1, self.news_sel + 1)
+        elif ch in (ord("c"), ord("C")):
+            if items:
+                self.copy_news_article(items[self.news_sel])
+            else:
+                self.say("No article to copy")
         elif ch == ord("o") and items:
             art = items[self.news_sel]
             if art.get("web_url"):

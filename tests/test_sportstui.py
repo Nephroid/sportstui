@@ -1506,6 +1506,57 @@ class TestSportstui(unittest.TestCase):
             self.assertEqual(items[1]["id"], "101")
             self.assertEqual(items[1]["league"], "CFB")
 
+    def test_copy_news_article(self):
+        from unittest.mock import patch
+        opts = sportstui.parse_args([])
+        app = sportstui.App(None, opts)
+
+        # 1. Copy from open reader (news_story)
+        app.news_story = ("Headline Here", "Story paragraph text", "https://espn.com/story1")
+        with patch.object(sportstui, "copy_to_clipboard", return_value=True) as mock_clip:
+            app.copy_news_article()
+            mock_clip.assert_called_once()
+            copied_text = mock_clip.call_args[0][0]
+            self.assertIn("Headline Here", copied_text)
+            self.assertIn("https://espn.com/story1", copied_text)
+            self.assertIn("Story paragraph text", copied_text)
+            self.assertEqual(app.notice[0], "Copied article to clipboard")
+
+        # 2. Copy from article dict with story_url fetching full body
+        app.news_story = None
+        mock_art = {
+            "headline": "Trade Alert",
+            "description": "Short preview",
+            "web_url": "https://espn.com/trade",
+            "story_url": "https://site.api.espn.com/story",
+        }
+        mock_story_json = {
+            "headlines": [{"story": "<p>Full details of the blockbuster trade.</p>"}]
+        }
+        with patch.object(sportstui, "fetch_json", return_value=mock_story_json), \
+             patch.object(sportstui, "copy_to_clipboard", return_value=True) as mock_clip:
+            app.copy_news_article(mock_art)
+            mock_clip.assert_called_once()
+            copied_text = mock_clip.call_args[0][0]
+            self.assertIn("Trade Alert", copied_text)
+            self.assertIn("https://espn.com/trade", copied_text)
+            self.assertIn("Full details of the blockbuster trade.", copied_text)
+
+        # 3. Handle news input key 'c' while in reader and list
+        import time
+        app.cache["news:cfb"] = (time.time(), [mock_art])
+        app.league_key = "cfb"
+        app.news_sel = 0
+        app.news_story = None
+        with patch.object(app, "copy_news_article") as mock_copy:
+            app.handle_news(ord("c"))
+            mock_copy.assert_called_once_with(mock_art)
+
+        app.news_story = ("Headline", "Body", "https://url")
+        with patch.object(app, "copy_news_article") as mock_copy:
+            app.handle_news(ord("c"))
+            mock_copy.assert_called_once_with()
+
     def test_breathing_attr_and_animated_borders(self):
         """Test breathing animation attribute generation and card integration."""
         opts = sportstui.parse_args([])

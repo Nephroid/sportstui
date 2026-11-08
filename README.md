@@ -50,7 +50,7 @@ You can run `sportstui` as a combined multi-league app or launch directly into a
 | `o` | Open **Conference / Division / Weight Class** filter modal (B1G, SEC, AFC/NFC, Heavyweight, Welterweight, etc.) |
 | `R` | Open side-by-side Rankings (AP/Coaches Top 25 for CFB/CBB; Men's & Women's P4P for UFC) |
 | `T` | Open side-by-side or tabbed Conference / Division Standings tables |
-| `N` | Open League News headlines (`Enter` to read story, `o` to open in browser) |
+| `N` | Open League News headlines (`Enter` to read, `c` to copy, `o` to open in browser) |
 | `a` / `!` (or `1` in single-league mode) | Toggle star on **away / blue corner** as favorite |
 | `h` / `@` (or `2` in single-league mode) | Toggle star on **home / red corner** as favorite |
 | `c` / `C` | Copy selected game/bout (`c`) or full board (`C`) formatted for Discord |
