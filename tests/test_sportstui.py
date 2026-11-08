@@ -1719,6 +1719,71 @@ class TestSportstui(unittest.TestCase):
         self.assertIsNotNone(alert)  # Late upset strobes
         self.assertEqual(alert["sitrep"], "VAN LEADS ALA")
 
+    def test_excitement_engine_and_filter(self):
+        opts = sportstui.parse_args(["--glyphs", "unicode"])
+        app = sportstui.App(None, opts)
+        app.league_key = "cfb"
+        app.favs.clear()
+
+        # 1. Routine unranked pre-game (should NOT qualify)
+        g_routine_pre = {
+            "id": "1", "league": "cfb", "state": "pre", "period": 0, "clock": "", "start": None,
+            "away": {"id": "10", "abbr": "MAC1", "name": "Team A", "rank": None, "score_int": 0, "color": "333333"},
+            "home": {"id": "11", "abbr": "MAC2", "name": "Team B", "rank": None, "score_int": 0, "color": "444444"},
+            "odds": {"details": "MAC1 -14.5"},
+        }
+        exc_pre = sportstui.evaluate_excitement(g_routine_pre)
+        self.assertFalse(exc_pre["qualifies"])
+        self.assertLess(exc_pre["score"], sportstui.EXCITEMENT_THRESHOLD)
+
+        # 2. Live Q3 Blowout (should NOT qualify)
+        g_blowout = {
+            "id": "2", "league": "cfb", "state": "in", "period": 3, "clock": "05:00", "start": None,
+            "away": {"id": "12", "abbr": "UGA", "name": "Georgia", "rank": 2, "score_int": 42, "color": "BA0C2F"},
+            "home": {"id": "13", "abbr": "MSST", "name": "Miss St", "rank": None, "score_int": 3, "color": "660000"},
+        }
+        exc_blowout = sportstui.evaluate_excitement(g_blowout)
+        self.assertFalse(exc_blowout["qualifies"])
+
+        # 3. Pre-game Rivalry (qualifies, ~42)
+        g_rivalry = {
+            "id": "3", "league": "cfb", "state": "pre", "period": 0, "clock": "", "start": None,
+            "rivalry": "Paul Bunyan's Axe",
+            "away": {"id": "14", "abbr": "MINN", "name": "Minnesota", "rank": None, "score_int": 0, "color": "7A0019"},
+            "home": {"id": "15", "abbr": "WIS", "name": "Wisconsin", "rank": None, "score_int": 0, "color": "C5050C"},
+        }
+        exc_riv = sportstui.evaluate_excitement(g_rivalry)
+        self.assertTrue(exc_riv["qualifies"])
+        self.assertEqual(exc_riv["badge"], "RIVALRY")
+
+        # 4. Pre-game Top-10 Ranked Clash (qualifies, ~50)
+        g_top10 = {
+            "id": "4", "league": "cfb", "state": "pre", "period": 0, "clock": "", "start": None,
+            "away": {"id": "16", "abbr": "OSU", "name": "Ohio State", "rank": 3, "score_int": 0, "color": "BB0000"},
+            "home": {"id": "17", "abbr": "ORE", "name": "Oregon", "rank": 6, "score_int": 0, "color": "154733"},
+        }
+        exc_top10 = sportstui.evaluate_excitement(g_top10)
+        self.assertTrue(exc_top10["qualifies"])
+        self.assertEqual(exc_top10["badge"], "TOP-10 CLASH")
+
+        # 5. Live Q4 01:20 1-score Clutch + Red Zone Goal-to-Go (qualifies, 99)
+        g_clutch_rz = {
+            "id": "5", "league": "cfb", "state": "in", "period": 4, "clock": "01:20", "start": None,
+            "away": {"id": "18", "abbr": "ALA", "name": "Alabama", "rank": 7, "score_int": 24, "color": "9E1B32"},
+            "home": {"id": "19", "abbr": "TENN", "name": "Tennessee", "rank": 11, "score_int": 27, "color": "FF8200"},
+            "situation": {"red_zone": True, "down": 4, "down_dist": "4th & Goal at TENN 2", "yard_line": 98},
+        }
+        exc_clutch = sportstui.evaluate_excitement(g_clutch_rz)
+        self.assertTrue(exc_clutch["qualifies"])
+        self.assertEqual(exc_clutch["score"], 99)
+        self.assertEqual(exc_clutch["badge"], "CLUTCH")
+
+        # 6. Verify visible() with 'exciting' filter filters & sorts highest score first
+        all_games = [g_routine_pre, g_blowout, g_rivalry, g_top10, g_clutch_rz]
+        app.filter = "exciting"
+        vis = app.visible(all_games)
+        self.assertEqual([g["id"] for g in vis], ["5", "4", "3"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -329,7 +329,7 @@ GLYPHS = {
         "kickoff": "", "period": "",
         "td": "", "fg": "◎", "score": "",
         "red_zone": "", "poss": "\uf0da",
-        "rivalry": "",
+        "rivalry": "", "thriller": "",
         "timeout": "", "timeout_used": "",
         "upset": "", "upset_watch": "",
         "fresh": "", "stale": "", "error": "", "loading": "", "refresh": "",
@@ -345,7 +345,7 @@ GLYPHS = {
         "kickoff": "⚐", "period": "»",
         "td": "★", "fg": "◆", "score": "•",
         "red_zone": "⚑", "poss": "▶",
-        "rivalry": "⚔",
+        "rivalry": "⚔", "thriller": "🔥",
         "timeout": "●", "timeout_used": "○",
         "upset": "⚡", "upset_watch": "◉",
         "fresh": "✔", "stale": "⌛", "error": "✖", "loading": "…", "refresh": "↻",
@@ -361,7 +361,7 @@ GLYPHS = {
         "kickoff": "🚀", "period": "⏭",
         "td": "🏈", "fg": "🎯", "score": "🔔",
         "red_zone": "🔥", "poss": "👉",
-        "rivalry": "🔥",
+        "rivalry": "🔥", "thriller": "🔥",
         "timeout": "🟢", "timeout_used": "⚪",
         "upset": "⚡", "upset_watch": "👀",
         "fresh": "✅", "stale": "⏳", "error": "❌", "loading": "🔃", "refresh": "🔄",
@@ -377,7 +377,7 @@ GLYPHS = {
         "kickoff": ">", "period": ">>",
         "td": "#", "fg": "^", "score": "*",
         "red_zone": "!!", "poss": ">",
-        "rivalry": "[RIVALRY]",
+        "rivalry": "[RIVALRY]", "thriller": "[!]",
         "timeout": "o", "timeout_used": ".",
         "upset": "!!!", "upset_watch": "?",
         "fresh": "ok", "stale": "~", "error": "x", "loading": "...", "refresh": "@",
@@ -598,6 +598,212 @@ def evaluate_upset(away, home, state, odds=None):
             except ValueError:
                 pass
     return None
+
+
+EXCITEMENT_THRESHOLD = 40
+
+
+def _parse_clock_seconds(clock):
+    if not clock:
+        return 9999
+    parts = str(clock).strip().split(":")
+    try:
+        if len(parts) == 2:
+            return int(parts[0]) * 60 + int(float(parts[1]))
+        if len(parts) == 1:
+            return int(float(parts[0]))
+    except (ValueError, TypeError):
+        pass
+    return 9999
+
+
+def evaluate_excitement(game):
+    """Multi-factor Excitement & Thriller scoring engine (0-99).
+    Evaluates:
+      1. Overtime / Extra Innings (live or final)
+      2. Live score margin + period/clock leverage (crunch time, 2-min drill, 4th Qtr)
+      3. Completed nail-biter / one-score finishes
+      4. Active Red Zone / Goal-to-Go / 4th Down situational threat
+      5. Upset Watch / Confirmed Upset (with Top-10 & late-game multipliers)
+      6. Marquee Stakes: Ranked-vs-Ranked (Top-10 / Top-25), Historic Rivalries, Title Bouts
+      7. Vegas tight spread (pick'em / <= 3.5) & high-scoring shootout pace
+    """
+    if not game:
+        return {"score": 0, "qualifies": False, "badge": ""}
+
+    lg = game.get("league") or "cfb"
+    state = game.get("state") or "pre"
+    period = game.get("period") or 0
+    clock_secs = _parse_clock_seconds(game.get("clock"))
+    away = game.get("away") or {}
+    home = game.get("home") or {}
+    sa = away.get("score_int", 0)
+    sh = home.get("score_int", 0)
+    diff = abs(sa - sh)
+    ra = away.get("rank")
+    rh = home.get("rank")
+    sit = game.get("situation") or {}
+    up = game.get("upset")
+    rivalry = game.get("rivalry")
+    is_title = bool(game.get("is_title"))
+    is_combat = bool(game.get("is_combat"))
+    odds = game.get("odds") or {}
+    reg_periods = (BY_KEY.get(lg) or {}).get("reg_periods", 4)
+    is_ot = bool(game.get("is_overtime")) or (not is_combat and period > reg_periods)
+
+    score = 0
+    reasons = []
+
+    # 1. Overtime / Extra Innings
+    if state == "in" and is_ot:
+        score += 65
+        reasons.append((95, "OT THRILLER"))
+    elif state == "post" and is_ot:
+        score += 45
+        reasons.append((80, "OT FINISH"))
+
+    # 2. Live Close-Score & Late-Clock Leverage
+    if state == "in":
+        if is_combat:
+            if period >= 3:
+                score += 42
+                reasons.append((72, "LATE ROUNDS"))
+        else:
+            if lg in ("cfb", "nfl"):
+                tight_diff, clutch_diff = 8, 3
+                is_late = (period >= 4 or is_ot)
+                is_crunch = (is_late and clock_secs <= 300)
+                is_two_min = (period in (2, 4) and clock_secs <= 120)
+            elif lg == "nba":
+                tight_diff, clutch_diff = 6, 3
+                is_late = (period >= 4 or is_ot)
+                is_crunch = (is_late and clock_secs <= 300)
+                is_two_min = (period in (2, 4) and clock_secs <= 120)
+            elif lg == "cbb":
+                tight_diff, clutch_diff = 6, 3
+                is_late = (period >= 2 or is_ot)
+                is_crunch = (is_late and clock_secs <= 300)
+                is_two_min = (is_late and clock_secs <= 120)
+            elif lg == "nhl":
+                tight_diff, clutch_diff = 1, 0
+                is_late = (period >= 3 or is_ot)
+                is_crunch = (is_late and clock_secs <= 300)
+                is_two_min = False
+            else:  # mlb
+                tight_diff, clutch_diff = 1, 0
+                is_late = (period >= 8 or is_ot)
+                is_crunch = (period >= 9 or is_ot)
+                is_two_min = False
+
+            if is_crunch and diff <= tight_diff:
+                score += 55 + (10 if (diff <= clutch_diff or is_two_min) else 0)
+                reasons.append((90, "CLUTCH"))
+            elif is_late and diff <= tight_diff:
+                score += 44 + (8 if diff <= clutch_diff else 0)
+                reasons.append((82, "LATE DRAMA"))
+            elif is_two_min and diff <= tight_diff:
+                score += 42
+                reasons.append((78, "2-MIN DRILL"))
+            elif ((lg == "cbb" and period >= 1 and clock_secs <= 600) or (lg != "cbb" and period >= 2)) and diff <= tight_diff:
+                score += 24 + (6 if diff <= clutch_diff else 0)
+                reasons.append((55, "CLOSE GAME"))
+
+    # 3. Completed Nail-Biter / One-Score Finish
+    elif state == "post" and not is_combat:
+        tight_final = 3 if lg in ("cfb", "nfl", "nba", "cbb") else 1
+        one_score_final = 8 if lg in ("cfb", "nfl") else (5 if lg in ("nba", "cbb") else 1)
+        if diff <= tight_final:
+            score += 44
+            reasons.append((74, "NAIL-BITER"))
+        elif diff <= one_score_final:
+            score += 40
+            reasons.append((66, "1-SCORE FINAL"))
+
+    # 4. Active Red Zone / Goal-to-Go / 4th Down Threat
+    if state == "in" and sit.get("red_zone"):
+        down = sit.get("down")
+        dd = (sit.get("down_dist") or "").lower()
+        yl = sit.get("yard_line")
+        goal_line = (isinstance(yl, int) and (0 < yl <= 5 or 95 <= yl < 100)) or any("goal at %d" % n in dd for n in (1, 2, 3, 4, 5))
+        fourth_dn = (down == 4 or "4th" in dd)
+        if fourth_dn or goal_line:
+            score += 52
+            reasons.append((86, "GOAL LINE" if goal_line else "4TH DOWN RZ"))
+        else:
+            score += 40
+            reasons.append((68, "RED ZONE"))
+
+    # 5. Upset Watch / Confirmed Upset
+    if up:
+        fav_rank = (up.get("favorite") or {}).get("rank")
+        top10_upset = isinstance(fav_rank, int) and 1 <= fav_rank <= 10
+        if up.get("confirmed"):
+            score += 48 + (12 if top10_upset else 0)
+            reasons.append((85, "UPSET FINAL"))
+        else:
+            is_2nd_half = (period >= 3 or is_ot or (lg == "cbb" and period >= 2))
+            late_upset = is_2nd_half and (diff <= 10 or clock_secs <= 300)
+            score += 42 + (14 if late_upset else 0) + (10 if top10_upset else 0)
+            reasons.append((84 if late_upset else 75, "UPSET ALERT" if late_upset else "UPSET WATCH"))
+
+    # 6. Marquee Stakes: Ranked Matchups, Rivalries, Title Bouts
+    if isinstance(ra, int) and isinstance(rh, int) and 1 <= ra <= 25 and 1 <= rh <= 25:
+        if ra <= 10 and rh <= 10:
+            score += 50
+            reasons.append((83, "TOP-10 CLASH"))
+        else:
+            score += 44
+            reasons.append((76, "RANKED CLASH"))
+    elif (isinstance(ra, int) and 1 <= ra <= 25) or (isinstance(rh, int) and 1 <= rh <= 25):
+        min_r = min([r for r in (ra, rh) if isinstance(r, int) and 1 <= r <= 25])
+        score += 14 if min_r <= 5 else 10
+
+    if rivalry:
+        score += 42
+        reasons.append((70, "RIVALRY"))
+
+    if is_title:
+        score += 44
+        reasons.append((73, "TITLE BOUT"))
+
+    # 7. Vegas Tight Spread & High-Scoring Shootout Bonus
+    details = (odds.get("details") or "").strip()
+    if details:
+        dl = details.lower()
+        if dl in ("even", "pk", "pick"):
+            score += 10
+            reasons.append((40, "PICK'EM"))
+        else:
+            parts = details.split()
+            if len(parts) == 2:
+                try:
+                    if abs(float(parts[1])) <= 3.5:
+                        score += 10
+                        reasons.append((40, "TIGHT SPREAD"))
+                except ValueError:
+                    pass
+
+    if state in ("in", "post") and not is_combat:
+        shootout = (
+            (lg in ("cfb", "nfl") and sa >= 28 and sh >= 28)
+            or (lg == "nba" and sa >= 115 and sh >= 115)
+            or (lg == "cbb" and sa >= 80 and sh >= 80)
+            or (lg == "nhl" and sa >= 4 and sh >= 4)
+            or (lg == "mlb" and sa >= 6 and sh >= 6)
+        )
+        if shootout:
+            score += 15
+            reasons.append((65, "SHOOTOUT"))
+
+    # Live action boost so active thrillers sort ahead of pre-game/completed games
+    if state == "in" and score >= EXCITEMENT_THRESHOLD:
+        score += 8
+
+    capped = min(99, score)
+    qualifies = score >= EXCITEMENT_THRESHOLD
+    badge = max(reasons, key=lambda r: r[0])[1] if reasons else ("THRILLER" if qualifies else "")
+    return {"score": capped, "qualifies": qualifies, "badge": badge}
+
 
 
 def parse_game(ev, lg):
@@ -1768,7 +1974,7 @@ class App:
             loaded_anim = "hybrid"
         self.anim_mode = loaded_anim
         self.view = "board"          # board | extra | detail | news | help | group_picker
-        self.filter = "all"
+        self.filter = getattr(opts, "filter", None) or "all"
         self.group_filter = None     # conference or division ID/key
         self.group_name = None       # human display name
         self.picker_sel = 0
@@ -2171,6 +2377,8 @@ class App:
                 ]
         if self.filter == "live":
             rows = [g for g in rows if g["state"] == "in"]
+        elif self.filter == "exciting":
+            rows = [g for g in rows if evaluate_excitement(g)["qualifies"]]
         elif self.filter in ("final", "completed"):
             rows = [g for g in rows if g["state"] == "post"]
         elif self.filter == "top25":
@@ -2180,12 +2388,21 @@ class App:
         elif self.filter == "upsets":
             rows = [g for g in rows if g.get("upset")]
         order = {"in": 0, "pre": 1, "post": 2}
-        rows.sort(key=lambda g: (
-            0 if self.game_fav(g) else 1,
-            order.get(g["state"], 3),
-            g["start"] or dt.datetime.max.replace(tzinfo=dt.timezone.utc),
-            g["id"],
-        ))
+        if self.filter == "exciting":
+            rows.sort(key=lambda g: (
+                0 if self.game_fav(g) else 1,
+                -evaluate_excitement(g)["score"],
+                order.get(g["state"], 3),
+                g["start"] or dt.datetime.max.replace(tzinfo=dt.timezone.utc),
+                g["id"],
+            ))
+        else:
+            rows.sort(key=lambda g: (
+                0 if self.game_fav(g) else 1,
+                order.get(g["state"], 3),
+                g["start"] or dt.datetime.max.replace(tzinfo=dt.timezone.utc),
+                g["id"],
+            ))
         return rows
 
     def selected_index(self, rows):
@@ -2619,6 +2836,7 @@ class App:
                 ("⏎", "Detail"),
                 ("v", "Layout"),
                 ("l", "Filter"),
+                ("e", "Exciting"),
                 ("o", group_lbl),
                 ("R", "Rankings"),
                 ("T", "Standings"),
@@ -2942,6 +3160,13 @@ class App:
                 lbl = "  %s RED ZONE" % g["red_zone"]
                 attr = self.breathing_attr("red_zone")
             segs.append((lbl, attr))
+        exc = evaluate_excitement(game)
+        has_special = bool(up or (live and sit and sit.get("red_zone")) or game.get("rivalry") or game.get("is_title"))
+        if self.filter == "exciting" and exc["qualifies"]:
+            thr_lbl = ("  %s %d" % (g["thriller"], exc["score"])) if has_special else ("  %s %d %s" % (g["thriller"], exc["score"], exc["badge"]))
+            segs.append((thr_lbl, self.attr("accent") | curses.A_BOLD))
+        elif exc["qualifies"] and exc["score"] >= 50 and not has_special:
+            segs.append(("  %s %s" % (g["thriller"], exc["badge"]), self.attr("accent") | curses.A_BOLD))
         self.segment(y, 0, segs, width)
 
     # -- grid layout (cfbtui grid.png exact style) -------------------------
@@ -3030,11 +3255,21 @@ class App:
                 titles.append("%s %s" % (g["rivalry"], riv_name))
             else:
                 titles.append("%s RIVALRY" % g["rivalry"])
+        exc = evaluate_excitement(game)
+        has_special = bool(up or red_zone or game.get("rivalry") or game.get("is_title"))
+        if self.filter == "exciting" and exc["qualifies"]:
+            if has_special:
+                titles.append("%s %d" % (g["thriller"], exc["score"]))
+            else:
+                titles.append("%s %d %s" % (g["thriller"], exc["score"], exc["badge"]))
+        elif exc["qualifies"] and exc["score"] >= 50 and not has_special:
+            titles.append("%s %s" % (g["thriller"], exc["badge"]))
         if selected:
             titles.append("▸")
         title_str = " ".join(titles)
 
-        heavy = bool(selected or up or red_zone or game.get("rivalry"))
+        is_thriller = bool(exc["qualifies"] and (self.filter == "exciting" or exc["score"] >= 50))
+        heavy = bool(selected or up or red_zone or game.get("rivalry") or is_thriller)
         alert_kind = "red_zone" if red_zone else ("upset" if up else None)
         mode = getattr(self, "anim_mode", "hybrid")
 
@@ -3088,6 +3323,8 @@ class App:
                     pfx_items.append("%s %s" % (g["rivalry"], riv_name))
                 else:
                     pfx_items.append("%s RIVALRY" % g["rivalry"])
+            if self.filter == "exciting" and exc["qualifies"]:
+                pfx_items.append("%s %d" % (g["thriller"], exc["score"]))
             alert_dict["pfx"] = " ".join(pfx_items)
             alert_dict["sfx"] = "▸" if selected else ""
 
@@ -3106,7 +3343,7 @@ class App:
             border_attr = self.breathing_attr("red_zone")
         elif up:
             border_attr = self.breathing_attr("upset")
-        elif game.get("rivalry"):
+        elif game.get("rivalry") or is_thriller:
             border_attr = self.attr("accent")
         elif live:
             border_attr = self.attr("good")
@@ -3678,7 +3915,8 @@ class App:
             ("", "base"),
             ("DISPLAY & ACTIONS", "accent"),
             ("  v                   Toggle card grid vs compact list layout", "base"),
-            ("  l                   Filter: all / live / final / favorites / top25 / upsets", "base"),
+            ("  l                   Filter: all / live / exciting / final / fav / upsets / top25", "base"),
+            ("  e                   Toggle Exciting Games filter (sorted by thriller score)", "base"),
             ("  o                   Filter by conference / division / weight class", "base"),
             ("  a / h (or ! / @)    Star / unstar away/blue or home/red corner as favorite", "base"),
             ("  c / C               Copy selected game (c) or whole board (C) for Discord", "base"),
@@ -3955,11 +4193,16 @@ class App:
             self.scr.clear()
             self.save_config()
         elif ch == ord("l"):
-            options = ["all", "live", "final", "fav", "upsets"] + (["top25"] if self.lg()["poll"] else [])
+            options = ["all", "live", "exciting", "final", "fav", "upsets"] + (["top25"] if self.lg()["poll"] else [])
             self.filter = options[(options.index(self.filter) + 1) % len(options)] if self.filter in options else "all"
             self.scroll = 0
             self.scr.clear()
             self.say("filter: %s" % self.filter)
+        elif ch in (ord("e"), ord("E")):
+            self.filter = "all" if self.filter == "exciting" else "exciting"
+            self.scroll = 0
+            self.scr.clear()
+            self.say("filter: exciting (thrillers)" if self.filter == "exciting" else "filter: all")
         elif ch == ord("o"):
             self.open_group_picker()
         elif ch == ord("R"):
@@ -4262,6 +4505,8 @@ def build_parser(prog="sportstui"):
     parser.add_argument("--date", type=lambda s: dt.date.fromisoformat(s), help="YYYY-MM-DD")
     parser.add_argument("--week", type=int, help="start on week N (CFB / NFL only)")
     parser.add_argument("--layout", choices=["grid", "list"])
+    parser.add_argument("--filter", choices=["all", "live", "exciting", "final", "fav", "upsets", "top25"],
+                        help="initial game filter (e.g. exciting, live, upsets)")
     parser.add_argument("--cols", "-c", type=int, help="number of grid columns (default: auto reflow)")
     parser.add_argument("--glyphs", choices=list(GLYPHS))
     parser.add_argument("--anim", "--animation", choices=["hybrid", "strobe", "breathing", "off"],
