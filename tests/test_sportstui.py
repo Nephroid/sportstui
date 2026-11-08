@@ -1517,7 +1517,7 @@ class TestSportstui(unittest.TestCase):
         self.assertIsInstance(a_rz, int)
         self.assertIsInstance(a_up, int)
 
-        # 2. Card border in red zone uses marquee in marquee mode
+        # 2. Card border in red zone uses strobe in strobe mode (Option #3)
         game_rz = {
             "id": "1", "state": "in", "short": "Q4 02:15", "league": "nfl",
             "away": {"id": "1", "name": "Packers", "abbr": "GB", "color": "203731", "score": "20", "score_int": 20},
@@ -1525,26 +1525,28 @@ class TestSportstui(unittest.TestCase):
             "situation": {"red_zone": True, "down_dist": "1st & Goal at DET 4"},
         }
         captured_boxes = []
-        app.draw_box = lambda y, x, h, w, attr, title="", heavy=False, marquee=None: captured_boxes.append((attr, title, heavy, marquee))
+        app.draw_box = lambda y, x, h, w, attr, title="", heavy=False, marquee=None, alert=None: captured_boxes.append((attr, title, heavy, marquee, alert))
         app.put = lambda *a, **kw: None
         app.fill_line = lambda *a, **kw: None
         app.segment = lambda *a, **kw: None
 
-        app.anim_mode = "marquee"
+        app.anim_mode = "strobe"
         app.draw_card(game_rz, 0, 0, 42, False)
         self.assertEqual(len(captured_boxes), 1)
-        attr, title, heavy, marquee = captured_boxes[0]
+        attr, title, heavy, marquee, alert = captured_boxes[0]
         self.assertTrue(heavy)
-        self.assertIn("RED ZONE", title)
-        self.assertEqual(marquee, "red_zone")
+        self.assertIsNotNone(alert)
+        self.assertEqual(alert["kind"], "red_zone")
+        self.assertEqual(alert["sitrep"], "1ST & GOAL")
 
-        # 3. Card border in breathing mode passes marquee=None
+        # 3. Card border in breathing mode passes alert=None and marquee=None
         captured_boxes.clear()
         app.anim_mode = "breathing"
         app.draw_card(game_rz, 0, 0, 42, False)
         self.assertEqual(len(captured_boxes), 1)
-        attr, title, heavy, marquee = captured_boxes[0]
+        attr, title, heavy, marquee, alert = captured_boxes[0]
         self.assertTrue(heavy)
+        self.assertIsNone(alert)
         self.assertIsNone(marquee)
 
         # 4. Off mode returns static attribute without crashing
@@ -1552,28 +1554,76 @@ class TestSportstui(unittest.TestCase):
         attr_off = app.breathing_attr("red_zone")
         self.assertIsInstance(attr_off, int)
 
-        # 5. Hotkey 'm' cycles modes: marquee -> breathing -> off -> marquee
-        app.anim_mode = "marquee"
+        # 5. Hotkey 'm' cycles modes: strobe -> breathing -> off -> strobe
+        app.anim_mode = "strobe"
         app.handle(ord("m"))
         self.assertEqual(app.anim_mode, "breathing")
         app.handle(ord("m"))
         self.assertEqual(app.anim_mode, "off")
         app.handle(ord("m"))
-        self.assertEqual(app.anim_mode, "marquee")
+        self.assertEqual(app.anim_mode, "strobe")
 
-        # 6. Real draw_box with marquee renders bulbs and corners
+        # 6. Real draw_box with strobe renders tactical corner brackets and flashing sitrep badges
         real_app = sportstui.App(None, opts)
-        real_app.anim_mode = "marquee"
+        real_app.anim_mode = "strobe"
         segments_drawn = []
         puts_drawn = []
         real_app.segment = lambda y, x, segs, w: segments_drawn.append((y, x, segs, w))
         real_app.put = lambda y, x, ch, attr=0, **kw: puts_drawn.append((y, x, ch, attr))
-        real_app.draw_box(0, 0, 5, 42, 0, title="⚑ RED ZONE", heavy=True, marquee="red_zone")
-        self.assertEqual(len(segments_drawn), 2)  # top edge and bottom edge
-        self.assertEqual(len(puts_drawn), 6)      # 3 left edge + 3 right edge cells
+        real_app.draw_box(0, 0, 5, 42, 0, title="⚑ RED ZONE", heavy=True, alert={"kind": "red_zone", "sitrep": "1ST & GOAL"})
+        self.assertEqual(len(segments_drawn), 2)  # top and bottom bars
+        self.assertEqual(len(puts_drawn), 6)      # 3 left + 3 right edge cells
         top_segs = segments_drawn[0][2]
-        self.assertEqual(top_segs[0][0], "┏")    # heavy top-left corner
-        self.assertTrue(any("●" in txt for txt, _ in top_segs))  # marquee bulb present
+        self.assertTrue(top_segs[0][0].startswith("┏"))  # top-left bracket starts with ┏
+        self.assertTrue(any("1ST & GOAL" in txt or "RED ZONE" in txt for txt, _ in top_segs))
+
+    def test_two_phase_strobe_phases_and_sitrep(self):
+        """Test exact rendering and sitrep extraction for Phase 0 and Phase 1 of Two-Phase Strobe."""
+        import time as py_time
+        opts = sportstui.parse_args([])
+        app = sportstui.App(None, opts)
+        app.anim_mode = "strobe"
+
+        # Phase 0 test: Solid Heavy Alert Frame + Inverted Alert Badge Block
+        orig_time = py_time.time
+        try:
+            py_time.time = lambda: 0.0  # int(0.0 * 2.5) % 2 == 0
+            segs_p0, puts_p0 = [], []
+            app.segment = lambda y, x, segs, w: segs_p0.append((y, x, segs, w))
+            app.put = lambda y, x, ch, attr=0, **kw: puts_p0.append((y, x, ch, attr))
+            app.draw_box(0, 0, 5, 42, 0, heavy=True, alert={"kind": "red_zone", "sitrep": "1ST & GOAL", "base_label": "RED ZONE"})
+
+            self.assertEqual(len(segs_p0), 2)  # top bar and bottom bar are segments
+            self.assertEqual(len(puts_p0), 6)  # 3 left + 3 right
+            top0 = segs_p0[0][2]
+            self.assertEqual(top0[0][0], "┏━")
+            self.assertTrue(any("RED ZONE" in txt for txt, _ in top0))
+
+            # Phase 1 test: Tactical Corner Brackets + Flashing Sitrep Badge
+            py_time.time = lambda: 0.4  # int(0.4 * 2.5) % 2 == 1
+            segs_p1, puts_p1 = [], []
+            app.segment = lambda y, x, segs, w: segs_p1.append((y, x, segs, w))
+            app.put = lambda y, x, ch, attr=0, **kw: puts_p1.append((y, x, ch, attr))
+            app.draw_box(0, 0, 5, 42, 0, heavy=True, alert={"kind": "red_zone", "sitrep": "1ST & GOAL", "base_label": "RED ZONE"})
+
+            self.assertEqual(len(segs_p1), 2)  # top bar and bottom bar are segments
+            self.assertEqual(len(puts_p1), 6)  # 3 left + 3 right
+            top1 = segs_p1[0][2]
+            self.assertEqual(top1[0][0], "┏━━")
+            self.assertTrue(any("1ST & GOAL" in txt for txt, _ in top1))
+
+            # Bottom bar in Phase 1 has 3 bracket segments: left bracket, thin bridge, right bracket
+            bot1 = segs_p1[1][2]
+            self.assertEqual(bot1[0][0], "┗━━")
+            self.assertTrue(bot1[1][0].startswith("─"))
+            self.assertEqual(bot1[2][0], "━━┛")
+
+            # Middle side edge in Phase 1 is dim thin vertical line │
+            side_chars = [ch for _, _, ch, _ in puts_p1]
+            self.assertIn("│", side_chars)
+            self.assertIn("┃", side_chars)
+        finally:
+            py_time.time = orig_time
 
 
 if __name__ == "__main__":

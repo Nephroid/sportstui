@@ -1763,7 +1763,10 @@ class App:
             except (ValueError, TypeError):
                 self.forced_cols = None
         self.glyphs = opts.glyphs or self.cfg.get("glyphs") or "nerd"
-        self.anim_mode = getattr(opts, "anim", None) or self.cfg.get("animation") or "marquee"
+        loaded_anim = getattr(opts, "anim", None) or self.cfg.get("animation")
+        if not loaded_anim or loaded_anim == "marquee":
+            loaded_anim = "strobe"
+        self.anim_mode = loaded_anim
         self.view = "board"          # board | extra | detail | news | help | group_picker
         self.filter = "all"
         self.group_filter = None     # conference or division ID/key
@@ -1928,7 +1931,8 @@ class App:
             return curses.A_BOLD
 
         has_256 = self.colours and getattr(curses, "COLORS", 0) >= 256
-        if getattr(self, "anim_mode", "marquee") == "off":
+        mode = getattr(self, "anim_mode", "strobe")
+        if mode in ("off", "strobe"):
             if kind == "red_zone":
                 return self.pair(196) | curses.A_BOLD if has_256 else (self.pair(getattr(curses, "COLOR_RED", 1)) | curses.A_BOLD)
             if kind == "upset":
@@ -2154,7 +2158,7 @@ class App:
         except curses.error:
             pass
 
-    def draw_box(self, y, x, height, width, border_attr, title="", heavy=False, marquee=None):
+    def draw_box(self, y, x, height, width, border_attr, title="", heavy=False, marquee=None, alert=None):
         g = self.g()
         tl = g["tl_heavy"] if heavy else g["tl_round"]
         tr = g["tr_heavy"] if heavy else g["tr_round"]
@@ -2164,8 +2168,107 @@ class App:
         vt = g["v_heavy"] if heavy else g["v"]
         inner = max(0, width - 2)
 
+        has_256 = self.colours and getattr(curses, "COLORS", 0) >= 256
+        mode = getattr(self, "anim_mode", "strobe")
+
+        # Two-Phase Strobe / Tactical Corner Brackets & Flashing Badge (Option #3)
+        if alert and mode == "strobe":
+            if isinstance(alert, str):
+                alert = {"kind": alert}
+            kind = alert.get("kind", "red_zone")
+            if kind == "red_zone":
+                alert_attr = self.pair(196) | curses.A_BOLD if has_256 else (self.pair(getattr(curses, "COLOR_RED", 1)) | curses.A_BOLD)
+                inv_badge_attr = self.pair(16, 196) | curses.A_BOLD if has_256 else (curses.A_REVERSE | curses.A_BOLD)
+                glyph = g.get("red_zone") or "⚑"
+                default_lbl = "RED ZONE"
+                default_sitrep = "1ST & GOAL"
+            else:  # upset
+                alert_attr = self.pair(214) | curses.A_BOLD if has_256 else (self.pair(getattr(curses, "COLOR_YELLOW", 3)) | curses.A_BOLD)
+                inv_badge_attr = self.pair(16, 214) | curses.A_BOLD if has_256 else (curses.A_REVERSE | curses.A_BOLD)
+                glyph = g.get("upset") or "⚡"
+                default_lbl = "UPSET WATCH"
+                default_sitrep = "UPSET ALERT"
+
+            flash_bracket_attr = self.pair(231) | curses.A_BOLD if has_256 else (self.pair(getattr(curses, "COLOR_WHITE", 7)) | curses.A_BOLD)
+            flash_badge_attr = self.pair(16, 231) | curses.A_BOLD if has_256 else (curses.A_REVERSE | curses.A_BOLD)
+            dim_attr = self.attr("dim")
+
+            # 400ms per phase (2 frames at 200ms tick)
+            phase = int(time.time() * 2.5) % 2
+            pfx = (alert.get("pfx") or "").strip()
+            sfx = (alert.get("sfx") or "").strip()
+
+            if phase == 0:
+                # Phase 0: Solid Heavy Shield in Alert Color + Inverted Solid Badge Block
+                badge_lbl = alert.get("base_label") or default_lbl
+                badge_txt = "[ %s %s ]" % (glyph, badge_lbl)
+
+                top_segs = [(tl + hz, alert_attr)]
+                if pfx:
+                    top_segs.append((" " + pfx + " ", border_attr))
+                else:
+                    top_segs.append((" ", alert_attr))
+                top_segs.append((badge_txt, inv_badge_attr))
+                if sfx:
+                    top_segs.append((" " + sfx + " ", border_attr))
+                else:
+                    top_segs.append((" ", alert_attr))
+
+                used_w = sum(str_width(t) for t, _ in top_segs)
+                rem = max(0, width - 1 - used_w)
+                if rem > 0:
+                    top_segs.append((hz * rem, alert_attr))
+                top_segs.append((tr, alert_attr))
+                self.segment(y, x, top_segs, width)
+
+                for r in range(1, height - 1):
+                    self.put(y + r, x, vt, alert_attr)
+                    self.put(y + r, x + width - 1, vt, alert_attr)
+                self.segment(y + height - 1, x, [(bl + hz * inner + br, alert_attr)], width)
+                return
+
+            else:
+                # Phase 1: High-Contrast Bright White Corner Brackets + Flashing Sitrep Badge
+                sitrep_lbl = alert.get("sitrep") or default_sitrep
+                badge_txt = "[ %s %s ]" % (glyph, sitrep_lbl)
+
+                top_segs = [(tl + hz * 2, flash_bracket_attr)]
+                if pfx:
+                    top_segs.append((" " + pfx + " ", border_attr))
+                else:
+                    top_segs.append((" ", dim_attr))
+                top_segs.append((badge_txt, flash_badge_attr))
+                if sfx:
+                    top_segs.append((" " + sfx + " ", border_attr))
+                else:
+                    top_segs.append((" ", dim_attr))
+
+                used_w = sum(str_width(t) for t, _ in top_segs)
+                rem = max(0, width - 3 - used_w)
+                thin_hz = g["h"]
+                if rem > 0:
+                    top_segs.append((thin_hz * rem, dim_attr))
+                top_segs.append((hz * 2 + tr, flash_bracket_attr))
+                self.segment(y, x, top_segs, width)
+
+                for r in range(1, height - 1):
+                    is_bracket = (r == 1 or r == height - 2)
+                    edge_ch = vt if is_bracket else g["v"]
+                    edge_attr = flash_bracket_attr if is_bracket else dim_attr
+                    self.put(y + r, x, edge_ch, edge_attr)
+                    self.put(y + r, x + width - 1, edge_ch, edge_attr)
+
+                rem_bot = max(0, inner - 4)
+                bot_segs = [
+                    (bl + hz * 2, flash_bracket_attr),
+                    (thin_hz * rem_bot, dim_attr),
+                    (hz * 2 + br, flash_bracket_attr),
+                ]
+                self.segment(y + height - 1, x, bot_segs, width)
+                return
+
         # Standard non-marquee rendering or if marquee is not active
-        if not marquee or getattr(self, "anim_mode", "marquee") != "marquee":
+        if not marquee or mode != "marquee":
             if title:
                 title_clipped = clip_to_width(title, max(0, inner - 4))
                 t_str = " %s " % title_clipped
@@ -2716,11 +2819,45 @@ class App:
         if game.get("rivalry"):
             riv_lbl = ("  %s %s" % (g["rivalry"], game["rivalry"].upper())) if width >= 105 else ("  %s RIVALRY" % g["rivalry"])
             segs.append((riv_lbl, self.attr("accent")))
+        mode = getattr(self, "anim_mode", "strobe")
+        has_256 = self.colours and getattr(curses, "COLORS", 0) >= 256
+        phase = int(time.time() * 2.5) % 2
         if up:
-            lbl = ("  %s UPSET" % g["upset"]) if up["confirmed"] else ("  %s UPSET WATCH" % g["upset_watch"])
-            segs.append((lbl, self.breathing_attr("upset")))
+            if mode == "strobe":
+                if phase == 0:
+                    lbl = ("  [ %s UPSET ]" % g["upset"]) if up["confirmed"] else ("  [ %s UPSET WATCH ]" % g["upset_watch"])
+                    attr = self.pair(16, 214) | curses.A_BOLD if has_256 else (curses.A_REVERSE | curses.A_BOLD)
+                else:
+                    und = up.get("underdog") or {}
+                    fav = up.get("favorite") or {}
+                    u_tag = und.get("abbr") or und.get("name") or ""
+                    f_tag = fav.get("abbr") or fav.get("name") or ""
+                    sitrep = ("%s LEADS %s" % (u_tag.upper(), f_tag.upper())) if (u_tag and f_tag and not up["confirmed"]) else ("FINAL UPSET" if up["confirmed"] else "UPSET ALERT")
+                    lbl = "  [ %s %s ]" % (g["upset"], sitrep)
+                    attr = self.pair(16, 231) | curses.A_BOLD if has_256 else (curses.A_REVERSE | curses.A_BOLD)
+            else:
+                lbl = ("  %s UPSET" % g["upset"]) if up["confirmed"] else ("  %s UPSET WATCH" % g["upset_watch"])
+                attr = self.breathing_attr("upset")
+            segs.append((lbl, attr))
         if live and sit and sit.get("red_zone"):
-            segs.append(("  %s RED ZONE" % g["red_zone"], self.breathing_attr("red_zone")))
+            if mode == "strobe":
+                if phase == 0:
+                    lbl = "  [ %s RED ZONE ]" % g["red_zone"]
+                    attr = self.pair(16, 196) | curses.A_BOLD if has_256 else (curses.A_REVERSE | curses.A_BOLD)
+                else:
+                    dd = (sit.get("down_dist") or "").strip()
+                    if " at " in dd:
+                        sitrep = dd.split(" at ")[0].strip().upper()
+                    elif dd:
+                        sitrep = dd[:16].strip().upper()
+                    else:
+                        sitrep = "1ST & GOAL"
+                    lbl = "  [ %s %s ]" % (g["red_zone"], sitrep)
+                    attr = self.pair(16, 231) | curses.A_BOLD if has_256 else (curses.A_REVERSE | curses.A_BOLD)
+            else:
+                lbl = "  %s RED ZONE" % g["red_zone"]
+                attr = self.breathing_attr("red_zone")
+            segs.append((lbl, attr))
         self.segment(y, 0, segs, width)
 
     # -- grid layout (cfbtui grid.png exact style) -------------------------
@@ -2815,7 +2952,62 @@ class App:
 
         heavy = bool(selected or up or red_zone or game.get("rivalry"))
         alert_kind = "red_zone" if red_zone else ("upset" if up else None)
-        box_marquee = alert_kind if (alert_kind and getattr(self, "anim_mode", "marquee") == "marquee") else None
+        mode = getattr(self, "anim_mode", "strobe")
+
+        alert_dict = None
+        if alert_kind:
+            if red_zone:
+                dd = (sit.get("down_dist") or "").strip()
+                if " at " in dd:
+                    sitrep = dd.split(" at ")[0].strip().upper()
+                elif dd:
+                    sitrep = dd[:16].strip().upper()
+                else:
+                    sitrep = "1ST & GOAL"
+                alert_dict = {
+                    "kind": "red_zone",
+                    "sitrep": sitrep,
+                    "base_label": "RED ZONE",
+                }
+            else:  # upset
+                if up.get("confirmed"):
+                    sitrep = "FINAL UPSET"
+                    base_lbl = "UPSET"
+                else:
+                    und = up.get("underdog") or {}
+                    fav = up.get("favorite") or {}
+                    u_tag = und.get("abbr") or und.get("name") or ""
+                    f_tag = fav.get("abbr") or fav.get("name") or ""
+                    if u_tag and f_tag:
+                        sitrep = "%s LEADS %s" % (u_tag.upper(), f_tag.upper())
+                    else:
+                        sitrep = "UPSET ALERT"
+                    base_lbl = "UPSET WATCH"
+                alert_dict = {
+                    "kind": "upset",
+                    "sitrep": sitrep,
+                    "base_label": base_lbl,
+                }
+
+            pfx_items = []
+            if self.league_key == "all":
+                pfx_items.append(game["league"].upper())
+            if game.get("is_combat"):
+                wc = game.get("weight_class") or ""
+                if wc:
+                    pfx_items.append(wc.upper())
+                if game.get("is_title"):
+                    pfx_items.append("🏆 TITLE")
+            if game.get("rivalry"):
+                riv_name = game["rivalry"].upper()
+                if cw >= 40 and len(riv_name) <= 22:
+                    pfx_items.append("%s %s" % (g["rivalry"], riv_name))
+                else:
+                    pfx_items.append("%s RIVALRY" % g["rivalry"])
+            alert_dict["pfx"] = " ".join(pfx_items)
+            alert_dict["sfx"] = "▸" if selected else ""
+
+        box_marquee = alert_kind if (alert_kind and mode == "marquee") else None
 
         if selected:
             if red_zone:
@@ -2837,7 +3029,9 @@ class App:
         else:
             border_attr = self.attr("dim")
 
-        if box_marquee:
+        if alert_dict and mode == "strobe":
+            self.draw_box(y, x, 5, cw, border_attr, title=title_str, heavy=heavy, alert=alert_dict)
+        elif box_marquee:
             self.draw_box(y, x, 5, cw, border_attr, title=title_str, heavy=heavy, marquee=box_marquee)
         else:
             self.draw_box(y, x, 5, cw, border_attr, title=title_str, heavy=heavy)
@@ -3398,7 +3592,7 @@ class App:
             ("  a / h (or ! / @)    Star / unstar away/blue or home/red corner as favorite", "base"),
             ("  c / C               Copy selected game (c) or whole board (C) for Discord", "base"),
             ("  $ / B               Launch Vegas Sportsbook board (vegastui)", "base"),
-            ("  m                   Cycle alert animation: marquee / breathing / off", "base"),
+            ("  m                   Cycle alert animation: strobe / breathing / off", "base"),
             ("  g                   Cycle icon set: nerd / unicode / emoji / ascii", "base"),
             ("  r                   Force refresh immediately", "base"),
             ("  Esc                 Back to scoreboard", "base"),
@@ -3581,9 +3775,9 @@ class App:
             self.say("glyphs: %s" % self.glyphs)
             return True
         if ch in (ord("m"), ord("M")):
-            modes = ["marquee", "breathing", "off"]
-            cur = getattr(self, "anim_mode", "marquee")
-            self.anim_mode = modes[(modes.index(cur) + 1) % len(modes)] if cur in modes else "marquee"
+            modes = ["strobe", "breathing", "off"]
+            cur = getattr(self, "anim_mode", "strobe")
+            self.anim_mode = modes[(modes.index(cur) + 1) % len(modes)] if cur in modes else "strobe"
             self.save_config()
             self.say("animation: %s" % self.anim_mode)
             return True
@@ -3979,8 +4173,8 @@ def build_parser(prog="sportstui"):
     parser.add_argument("--layout", choices=["grid", "list"])
     parser.add_argument("--cols", "-c", type=int, help="number of grid columns (default: auto reflow)")
     parser.add_argument("--glyphs", choices=list(GLYPHS))
-    parser.add_argument("--anim", "--animation", choices=["marquee", "breathing", "off"],
-                        help="alert card border animation style: marquee, breathing, or off (default: marquee)")
+    parser.add_argument("--anim", "--animation", choices=["strobe", "breathing", "marquee", "off"],
+                        help="alert card border animation style: strobe, breathing, marquee, or off (default: strobe)")
     parser.add_argument("--plain", action="store_true", help="print the board and exit")
     parser.add_argument("--version", action="version", version="%s %s" % (prog, VERSION))
     return parser
