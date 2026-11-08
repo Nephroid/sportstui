@@ -1789,6 +1789,74 @@ class TestSportstui(unittest.TestCase):
         vis_live_exc = app.visible(all_games)
         self.assertEqual([g["id"] for g in vis_live_exc], ["5"])
 
+    def test_hate_watch_tri_state_and_schadenfreude(self):
+        opts = sportstui.parse_args(["--glyphs", "emoji"])
+        app = sportstui.App(None, opts)
+        app.league_key = "cfb"
+        app.favs.clear()
+        app.hated.clear()
+
+        # 1. Test team_row_prefix visual width with skull glyph across sets
+        skull_cases = [
+            ("💀", None),
+            ("💀", 24),
+            ("☠", None),
+            ("☠", 7),
+            ("", 12),
+            ("X", None),
+        ]
+        for skull, rk in skull_cases:
+            pfx = sportstui.team_row_prefix("", skull, rk)
+            w = sportstui.str_width(pfx)
+            self.assertEqual(w, 8, f"Prefix {pfx!r} for ({skull!r}, {rk!r}) has width {w} != 8")
+            self.assertTrue(pfx.endswith(" "))
+
+        # 2. Test tri-state watchlist cycle on toggle_fav
+        side_smu = {"id": "2567", "abbr": "SMU", "name": "Mustangs"}
+        side_nd = {"id": "87", "abbr": "ND", "name": "Notre Dame"}
+        gm = {"league": "cfb", "away": side_smu, "home": side_nd, "state": "in"}
+
+        # State 1 (Normal) -> State 2 (Favorite ★)
+        app.toggle_fav(side_smu, gm)
+        self.assertTrue(app.is_fav(side_smu, gm))
+        self.assertFalse(app.is_hated(side_smu, gm))
+        self.assertTrue(app.game_watched(gm))
+
+        # State 2 (Favorite ★) -> State 3 (Hate-Watch 💀)
+        app.toggle_fav(side_smu, gm)
+        self.assertFalse(app.is_fav(side_smu, gm))
+        self.assertTrue(app.is_hated(side_smu, gm))
+        self.assertTrue(app.game_watched(gm))
+
+        # State 3 (Hate-Watch 💀) -> State 1 (Normal / Clear)
+        app.toggle_fav(side_smu, gm)
+        self.assertFalse(app.is_fav(side_smu, gm))
+        self.assertFalse(app.is_hated(side_smu, gm))
+        self.assertFalse(app.game_watched(gm))
+
+        # 3. Test Schadenfreude Excitement Boost when Hated Team is Trailing
+        app.hated.add("cfb:SMU")
+        # SMU trailing 14-28 in Q3
+        gm_smu_trailing = {
+            "id": "100", "league": "cfb", "state": "in", "period": 3, "clock": "06:00", "start": None,
+            "away": {"id": "2567", "abbr": "SMU", "score_int": 14, "color": "CC0000"},
+            "home": {"id": "183", "abbr": "SYR", "score_int": 28, "color": "D44500"},
+        }
+        exc_smu = sportstui.evaluate_excitement(gm_smu_trailing, app.hated)
+        self.assertTrue(exc_smu["qualifies"])
+        self.assertGreaterEqual(exc_smu["score"], 40)
+        self.assertEqual(exc_smu["badge"], "HATE WATCH")
+
+        # 4. Scoreboard pinning: SMU game is pinned under watchlist
+        unrelated_gm = {
+            "id": "101", "league": "cfb", "state": "in", "period": 3, "clock": "06:00", "start": None,
+            "away": {"id": "1", "abbr": "TEM", "score_int": 10, "color": "990000"},
+            "home": {"id": "2", "abbr": "USF", "score_int": 14, "color": "006747"},
+        }
+        app.filter = "all"
+        vis = app.visible([unrelated_gm, gm_smu_trailing])
+        self.assertEqual(vis[0]["id"], "100")  # Pinned to the top!
+
 
 if __name__ == "__main__":
     unittest.main()

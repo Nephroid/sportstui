@@ -333,7 +333,7 @@ GLYPHS = {
         "timeout": "", "timeout_used": "",
         "upset": "", "upset_watch": "",
         "fresh": "", "stale": "", "error": "", "loading": "", "refresh": "",
-        "star": "★", "dot": "  ·  ", "at": "@", "rank": "#",
+        "star": "★", "hate": "", "dot": "  ·  ", "at": "@", "rank": "#",
         "bar_full": "█", "bar_empty": "░", "spark": "▁▂▃▄▅▆▇█",
     },
     "unicode": {
@@ -349,7 +349,7 @@ GLYPHS = {
         "timeout": "●", "timeout_used": "○",
         "upset": "⚡", "upset_watch": "◉",
         "fresh": "✔", "stale": "⌛", "error": "✖", "loading": "…", "refresh": "↻",
-        "star": "★", "dot": "  ·  ", "at": "@", "rank": "#",
+        "star": "★", "hate": "☠", "dot": "  ·  ", "at": "@", "rank": "#",
         "bar_full": "█", "bar_empty": "░", "spark": "▁▂▃▄▅▆▇█",
     },
     "emoji": {
@@ -365,7 +365,7 @@ GLYPHS = {
         "timeout": "🟢", "timeout_used": "⚪",
         "upset": "⚡", "upset_watch": "👀",
         "fresh": "✅", "stale": "⏳", "error": "❌", "loading": "🔃", "refresh": "🔄",
-        "star": "⭐", "dot": "  ·  ", "at": "@", "rank": "#",
+        "star": "⭐", "hate": "💀", "dot": "  ·  ", "at": "@", "rank": "#",
         "bar_full": "🟩", "bar_empty": "⬜", "spark": "▁▂▃▄▅▆▇█",
     },
     "ascii": {
@@ -381,7 +381,7 @@ GLYPHS = {
         "timeout": "o", "timeout_used": ".",
         "upset": "!!!", "upset_watch": "?",
         "fresh": "ok", "stale": "~", "error": "x", "loading": "...", "refresh": "@",
-        "star": "*", "dot": "  -  ", "at": "@", "rank": "#",
+        "star": "*", "hate": "X", "dot": "  -  ", "at": "@", "rank": "#",
         "bar_full": "#", "bar_empty": "-", "spark": "_.:-=+*#",
     },
 }
@@ -617,7 +617,7 @@ def _parse_clock_seconds(clock):
     return 9999
 
 
-def evaluate_excitement(game):
+def evaluate_excitement(game, hated_teams=None):
     """Multi-factor Excitement & Thriller scoring engine (0-99).
     Evaluates:
       1. Overtime / Extra Innings (live or final)
@@ -627,6 +627,7 @@ def evaluate_excitement(game):
       5. Upset Watch / Confirmed Upset (with Top-10 & late-game multipliers)
       6. Marquee Stakes: Ranked-vs-Ranked (Top-10 / Top-25), Historic Rivalries, Title Bouts
       7. Vegas tight spread (pick'em / <= 3.5) & high-scoring shootout pace
+      8. Hate-Watch Schadenfreude (hated team playing, trailing, or on upset alert)
     """
     if not game:
         return {"score": 0, "qualifies": False, "badge": ""}
@@ -794,6 +795,35 @@ def evaluate_excitement(game):
         if shootout:
             score += 15
             reasons.append((65, "SHOOTOUT"))
+
+    # 8. Hate-Watch Schadenfreude Leverage
+    if hated_teams:
+        aw_abbr = (away.get("abbr") or "").upper()
+        hm_abbr = (home.get("abbr") or "").upper()
+        aw_hated = ("%s:%s" % (lg, aw_abbr) in hated_teams) or any(h.endswith(":" + aw_abbr) for h in hated_teams)
+        hm_hated = ("%s:%s" % (lg, hm_abbr) in hated_teams) or any(h.endswith(":" + hm_abbr) for h in hated_teams)
+        if aw_hated or hm_hated:
+            hated_trailing = False
+            if state in ("in", "post") and not is_combat:
+                if aw_hated and sh > sa:
+                    hated_trailing = True
+                elif hm_hated and sa > sh:
+                    hated_trailing = True
+
+            if state == "in":
+                if hated_trailing:
+                    score += 42
+                    reasons.append((88, "HATE WATCH"))
+                else:
+                    score += 15
+                    reasons.append((60, "HATE WATCH"))
+            elif state == "post":
+                if hated_trailing:
+                    score += 40
+                    reasons.append((72, "HATE WATCH"))
+            elif state == "pre":
+                score += 12
+                reasons.append((45, "HATE WATCH"))
 
     # Live action boost so active thrillers sort ahead of pre-game/completed games
     if state == "in" and score >= EXCITEMENT_THRESHOLD:
@@ -1953,6 +1983,7 @@ class App:
         self.cache = {}          # key -> (time, value, err)
         self.cfg = self.load_config()
         self.favs = set(self.cfg.get("favorites") or DEFAULT_FAVORITES)
+        self.hated = set(self.cfg.get("hated") or [])
         self.only = getattr(opts, "only", None)
         if self.only not in BY_KEY:
             self.only = None
@@ -2017,6 +2048,7 @@ class App:
             "glyphs": self.glyphs,
             "animation": self.anim_mode,
             "favorites": sorted(self.favs),
+            "hated": sorted(self.hated),
         }
         if self.forced_cols is not None:
             data["cols"] = self.forced_cols
@@ -2361,6 +2393,21 @@ class App:
     def game_fav(self, game):
         return self.is_fav(game["away"], game) or self.is_fav(game["home"], game)
 
+    def is_hated(self, side, game=None):
+        lg = (game.get("league") if game else None) or self.league_key
+        if lg != "all":
+            return "%s:%s" % (lg, side["abbr"]) in self.hated
+        return any(f.endswith(":" + side["abbr"]) for f in self.hated)
+
+    def game_hated(self, game):
+        return self.is_hated(game["away"], game) or self.is_hated(game["home"], game)
+
+    def is_watched(self, side, game=None):
+        return self.is_fav(side, game) or self.is_hated(side, game)
+
+    def game_watched(self, game):
+        return self.game_fav(game) or self.game_hated(game)
+
     def visible(self, games):
         rows = list(games or [])
         if self.group_filter and self.group_filter != "all":
@@ -2378,29 +2425,29 @@ class App:
         if self.filter == "live":
             rows = [g for g in rows if g["state"] == "in"]
         elif self.filter == "live-exciting":
-            rows = [g for g in rows if g["state"] == "in" and evaluate_excitement(g)["qualifies"]]
+            rows = [g for g in rows if g["state"] == "in" and evaluate_excitement(g, self.hated)["qualifies"]]
         elif self.filter == "exciting":
-            rows = [g for g in rows if evaluate_excitement(g)["qualifies"]]
+            rows = [g for g in rows if evaluate_excitement(g, self.hated)["qualifies"]]
         elif self.filter in ("final", "completed"):
             rows = [g for g in rows if g["state"] == "post"]
         elif self.filter == "top25":
             rows = [g for g in rows if g["away"]["rank"] or g["home"]["rank"]]
         elif self.filter == "fav":
-            rows = [g for g in rows if self.game_fav(g)]
+            rows = [g for g in rows if self.game_watched(g)]
         elif self.filter == "upsets":
             rows = [g for g in rows if g.get("upset")]
         order = {"in": 0, "pre": 1, "post": 2}
         if self.filter in ("exciting", "live-exciting"):
             rows.sort(key=lambda g: (
-                0 if self.game_fav(g) else 1,
-                -evaluate_excitement(g)["score"],
+                0 if self.game_watched(g) else 1,
+                -evaluate_excitement(g, self.hated)["score"],
                 order.get(g["state"], 3),
                 g["start"] or dt.datetime.max.replace(tzinfo=dt.timezone.utc),
                 g["id"],
             ))
         else:
             rows.sort(key=lambda g: (
-                0 if self.game_fav(g) else 1,
+                0 if self.game_watched(g) else 1,
                 order.get(g["state"], 3),
                 g["start"] or dt.datetime.max.replace(tzinfo=dt.timezone.utc),
                 g["id"],
@@ -2793,7 +2840,7 @@ class App:
         note_str = " · ".join(notes)
 
         live_cnt = sum(1 for gm in games if gm["state"] == "in")
-        live_exc_cnt = sum(1 for gm in games if gm["state"] == "in" and evaluate_excitement(gm)["qualifies"])
+        live_exc_cnt = sum(1 for gm in games if gm["state"] == "in" and evaluate_excitement(gm, self.hated)["qualifies"])
         if ent is not None:
             if live_exc_cnt > 0:
                 live_str = "%d live (%d %s exciting) of %d" % (live_cnt, live_exc_cnt, g["thriller"], len(games))
@@ -2981,13 +3028,21 @@ class App:
     def draw_list(self, rows, top, height, width):
         g = self.g()
         idx = self.selected_index(rows)
-        starred = [gm for gm in rows if self.game_fav(gm)]
-        rest = [gm for gm in rows if not self.game_fav(gm)]
+        starred = [gm for gm in rows if self.game_watched(gm)]
+        rest = [gm for gm in rows if not self.game_watched(gm)]
 
         # Build visual display lines: ("header", text) or ("game", game_index, game)
         vlines = []
         if starred:
-            vlines.append(("header", "  %s Favorites" % g["star"]))
+            has_fav = any(self.game_fav(gm) for gm in starred)
+            has_hate = any(self.game_hated(gm) for gm in starred)
+            if has_fav and has_hate:
+                hdr_label = "  %s Watchlist (Favorites & Hate-Watch)" % g["star"]
+            elif has_hate:
+                hdr_label = "  %s Hate Watch" % g["hate"]
+            else:
+                hdr_label = "  %s Favorites" % g["star"]
+            vlines.append(("header", hdr_label))
             for gm in starred:
                 vlines.append(("game", rows.index(gm), gm))
             if rest:
@@ -3026,16 +3081,17 @@ class App:
         sit = game.get("situation") if live else None
         poss = g["poss"] if (sit and sit.get("possession") == side["id"] and side["id"]) else ""
         fav = self.is_fav(side, game)
-        star = g["star"] if fav else ""
+        hated = self.is_hated(side, game)
+        badge_icon = g["star"] if fav else (g["hate"] if hated else "")
         rank_num = side.get("rank")
 
         if game.get("is_combat"):
-            icon = f"{star} " if star else ""
+            icon = f"{badge_icon} " if badge_icon else ""
             rk_str = f"#{rank_num} " if rank_num else ""
             name = side.get("name") or side.get("abbr") or "?"
             rec = f" {side['record'][:7]}" if side.get("record") else ""
             if cell_w >= 30:
-                prefix = team_row_prefix("", star, rank_num)
+                prefix = team_row_prefix("", badge_icon, rank_num)
                 max_nm_w = max(6, cell_w - 8 - len(rec) - 8)
                 nm_disp = clip_to_width(name, max_nm_w)
                 left = prefix + f"{nm_disp:<{max_nm_w}}{rec}"
@@ -3048,7 +3104,7 @@ class App:
                 pad = max(1, cell_w - str_width(left) - str_width(sc_fmt))
                 return left + (" " * pad) + sc_fmt
             else:
-                max_nm_w = max(5, cell_w - len(rk_str) - (2 if star else 0) - len(rec) - 6)
+                max_nm_w = max(5, cell_w - len(rk_str) - (2 if badge_icon else 0) - len(rec) - 6)
                 nm_disp = clip_to_width(name, max_nm_w)
                 left = "%s%s%-*s%s" % (
                     icon,
@@ -3064,7 +3120,7 @@ class App:
         # In card mode (cell_w >= 30), exact aligned block matching cfbtui:
         # Every team abbr starts at exact visual column 8
         if cell_w >= 30:
-            prefix = team_row_prefix(poss, star, rank_num)
+            prefix = team_row_prefix(poss, badge_icon, rank_num)
             abbr = side["abbr"][:5]
             rec = f" {side['record'][:6]}" if side.get("record") else ""
             left = prefix + f"{abbr:<5}{rec}"
@@ -3085,10 +3141,10 @@ class App:
             return left + (" " * pad) + sc_fmt
 
         # In compact list mode (cell_w around 21)
-        icon = f"{poss} " if poss else (f"{star} " if star else "")
+        icon = f"{poss} " if poss else (f"{badge_icon} " if badge_icon else "")
         rk_str = f"#{rank_num}" if rank_num else ""
         left = "%s%s%-5s %-6s" % (
-            icon if (fav or poss) else "",
+            icon if (fav or hated or poss) else "",
             (rk_str + " ") if rk_str else "",
             side["abbr"][:5],
             (side.get("record") or "")[:6],
@@ -3172,7 +3228,9 @@ class App:
                 lbl = "  %s RED ZONE" % g["red_zone"]
                 attr = self.breathing_attr("red_zone")
             segs.append((lbl, attr))
-        exc = evaluate_excitement(game)
+        if self.game_hated(game) and not up and not (live and sit and sit.get("red_zone")):
+            segs.append(("  %s HATE WATCH" % g["hate"], self.attr("live") | curses.A_BOLD))
+        exc = evaluate_excitement(game, self.hated)
         has_special = bool(up or (live and sit and sit.get("red_zone")) or game.get("rivalry") or game.get("is_title"))
         if self.filter in ("exciting", "live-exciting") and exc["qualifies"]:
             thr_lbl = ("  %s %d" % (g["thriller"], exc["score"])) if has_special else ("  %s %d %s" % (g["thriller"], exc["score"], exc["badge"]))
@@ -3189,13 +3247,21 @@ class App:
         layout = self.card_layout(width, cols)
         idx = self.selected_index(rows)
 
-        starred = [gm for gm in rows if self.game_fav(gm)]
-        rest = [gm for gm in rows if not self.game_fav(gm)]
+        starred = [gm for gm in rows if self.game_watched(gm)]
+        rest = [gm for gm in rows if not self.game_watched(gm)]
 
         # Build grid bands: either ("header", y_height=1, text) or ("card_row", y_height=5, [(g_idx, game), ...])
         bands = []
         if starred:
-            bands.append(("header", 1, "  %s Favorites" % g["star"]))
+            has_fav = any(self.game_fav(gm) for gm in starred)
+            has_hate = any(self.game_hated(gm) for gm in starred)
+            if has_fav and has_hate:
+                hdr_label = "  %s Watchlist (Favorites & Hate-Watch)" % g["star"]
+            elif has_hate:
+                hdr_label = "  %s Hate Watch" % g["hate"]
+            else:
+                hdr_label = "  %s Favorites" % g["star"]
+            bands.append(("header", 1, hdr_label))
             for r_start in range(0, len(starred), cols):
                 chunk = [(rows.index(gm), gm) for gm in starred[r_start:r_start + cols]]
                 bands.append(("cards", ch, chunk))
@@ -3267,7 +3333,9 @@ class App:
                 titles.append("%s %s" % (g["rivalry"], riv_name))
             else:
                 titles.append("%s RIVALRY" % g["rivalry"])
-        exc = evaluate_excitement(game)
+        if self.game_hated(game) and not up and not red_zone and cw >= 36:
+            titles.append("%s HATE WATCH" % g["hate"])
+        exc = evaluate_excitement(game, self.hated)
         has_special = bool(up or red_zone or game.get("rivalry") or game.get("is_title"))
         if self.filter in ("exciting", "live-exciting") and exc["qualifies"]:
             if has_special:
@@ -3281,7 +3349,7 @@ class App:
         title_str = " ".join(titles)
 
         is_thriller = bool(exc["qualifies"] and (self.filter in ("exciting", "live-exciting") or exc["score"] >= 50))
-        heavy = bool(selected or up or red_zone or game.get("rivalry") or is_thriller)
+        heavy = bool(selected or up or red_zone or game.get("rivalry") or is_thriller or self.game_watched(game))
         alert_kind = "red_zone" if red_zone else ("upset" if up else None)
         mode = getattr(self, "anim_mode", "hybrid")
 
@@ -3930,7 +3998,7 @@ class App:
             ("  l                   Filter: all / live / live-exciting / exciting / final / fav / upsets / top25", "base"),
             ("  e                   Cycle Exciting filter: live-exciting -> exciting (all) -> all", "base"),
             ("  o                   Filter by conference / division / weight class", "base"),
-            ("  a / h (or ! / @)    Star / unstar away/blue or home/red corner as favorite", "base"),
+            ("  a / h (or ! / @)    Watchlist: Favorite (★) -> Hate-Watch (💀) -> Clear", "base"),
             ("  c / C               Copy selected game (c) or whole board (C) for Discord", "base"),
             ("  $ / B               Launch Vegas Sportsbook board (vegastui)", "base"),
             ("  m                   Cycle alert animation: hybrid / strobe / breathing / off", "base"),
@@ -3940,7 +4008,9 @@ class App:
             ("  q                   Quit", "base"),
             ("", "base"),
             ("STARRED FAVORITES", "accent"),
-            ("  " + "  ".join(sorted(self.favs))[:box_w - 6], "dim"),
+            ("  " + ("  ".join(sorted(self.favs)) if self.favs else "(none)")[:box_w - 6], "dim"),
+            ("HATE-WATCH TEAMS", "live"),
+            ("  " + ("  ".join(sorted(self.hated)) if self.hated else "(none)")[:box_w - 6], "dim"),
         ]
         self.draw_box(top, 2, min(height, len(lines) + 2), box_w, self.attr("dim"), title="sportstui Help")
         for i, (text, kind) in enumerate(lines[:max(1, height - 2)]):
@@ -4375,17 +4445,25 @@ class App:
         self.sel_id = rows[idx]["id"]
 
     def toggle_fav(self, side, game=None):
+        """Tri-state watchlist cycle: Normal -> Favorite (★) -> Hate-Watch (💀) -> Clear."""
         lg = (game.get("league") if game else None) or (self.league_key if self.league_key != "all" else "cfb")
         key = "%s:%s" % (lg, side["abbr"])
-        if key in self.favs:
+        g = self.g()
+        if key in self.hated:
+            self.hated.discard(key)
+            self.say("Cleared %s %s from watchlist" % (lg.upper(), side["abbr"]))
+        elif key in self.favs:
             self.favs.discard(key)
-            self.say("Unstarred %s %s" % (lg.upper(), side["abbr"]))
+            self.hated.add(key)
+            self.say("Marked %s %s as HATE-WATCH %s" % (lg.upper(), side["abbr"], g["hate"]))
         else:
             self.favs.add(key)
-            self.say("Starred %s %s" % (lg.upper(), side["abbr"]))
+            self.say("Starred %s %s %s" % (lg.upper(), side["abbr"], g["star"]))
         if self.scr:
             self.scr.clear()
         self.save_config()
+
+    toggle_watchlist = toggle_fav
 
     def open_extra(self, kind):
         self.view = "extra"
