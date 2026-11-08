@@ -16,9 +16,11 @@ the visual design of WPTK/cfbtui:
 """
 
 import argparse
+import base64
 import concurrent.futures
 import curses
 import datetime as dt
+import gzip
 import html
 import json
 import os
@@ -42,7 +44,10 @@ CORE = "https://site.api.espn.com/apis/v2/sports"
 BOXERBOOK_BASE = "https://boxerbook.com/v1"
 EASTERN = ZoneInfo("America/New_York")
 CONFIG_PATH = os.path.expanduser(
-    os.environ.get("SPORTSTUI_CONFIG", "~/.config/sportstui/config.json")
+    os.environ.get(
+        "SPORTSTUI_CONFIG",
+        os.path.join(os.environ.get("XDG_CONFIG_HOME", "~/.config"), "sportstui", "config.json"),
+    )
 )
 
 ALL_LEAGUE = {
@@ -392,9 +397,22 @@ GLYPHS = {
 # --------------------------------------------------------------------------
 
 def fetch_json(url, timeout=12):
-    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json"})
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": UA,
+            "Accept": "application/json",
+            "Accept-Encoding": "gzip",
+        },
+    )
     with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.loads(resp.read().decode("utf-8", "replace"))
+        raw = resp.read()
+        if resp.headers.get("Content-Encoding") == "gzip" or (len(raw) >= 2 and raw[:2] == b"\x1f\x8b"):
+            try:
+                raw = gzip.decompress(raw)
+            except Exception:
+                pass
+        return json.loads(raw.decode("utf-8", "replace"))
 
 
 def dig(obj, *path, default=None):
@@ -452,14 +470,25 @@ def period_label(lg_key, period):
 
 
 def copy_to_clipboard(text):
+    data = text.encode("utf-8")
     for cmd in (["wl-copy"], ["xclip", "-selection", "clipboard"], ["xsel", "--clipboard", "--input"]):
         if shutil.which(cmd[0]):
             try:
-                subprocess.run(cmd, input=text.encode("utf-8"), check=True, timeout=3)
+                subprocess.run(cmd, input=data, check=True, timeout=3)
                 return True
             except Exception:  # noqa: BLE001
                 continue
-    return False
+    # Zero-dependency OSC 52 fallback (works over SSH, tmux, and modern terminal emulators)
+    try:
+        b64 = base64.b64encode(data).decode("ascii")
+        osc = "\033]52;c;%s\a" % b64
+        if os.environ.get("TMUX"):
+            osc = "\033Ptmux;\033%s\033\\" % osc
+        sys.stdout.write(osc)
+        sys.stdout.flush()
+        return True
+    except Exception:  # noqa: BLE001
+        return False
 
 
 # --------------------------------------------------------------------------
@@ -1795,19 +1824,22 @@ def hex_brightness(value):
 
 def hex_to_xterm(value):
     r, g, b = hex_rgb(value)
-    if max(r, g, b) - min(r, g, b) < 12:
-        if r < 8:
-            return 16
-        if r > 245:
-            return 231
-        grey = int(round((r - 8) / 10.0))
-        return 232 + max(0, min(23, grey))
     steps = (0, 95, 135, 175, 215, 255)
 
-    def near(v):
-        return min(range(6), key=lambda i: abs(steps[i] - v))
+    # 1. Best match in 6x6x6 color cube (indices 16..231)
+    ci = [min(range(6), key=lambda i: abs(v - steps[i])) for v in (r, g, b)]
+    cr, cg, cb = (steps[i] for i in ci)
+    cube_idx = 16 + 36 * ci[0] + 6 * ci[1] + ci[2]
+    cube_dist = (r - cr) ** 2 + (g - cg) ** 2 + (b - cb) ** 2
 
-    return 16 + 36 * near(r) + 6 * near(g) + near(b)
+    # 2. Best match in 24-step grayscale ramp (indices 232..255)
+    gray_val = round(((r + g + b) / 3.0 - 8) / 10.0)
+    gray_step = max(0, min(23, int(gray_val)))
+    gv = 8 + 10 * gray_step
+    gray_idx = 232 + gray_step
+    gray_dist = (r - gv) ** 2 + (g - gv) ** 2 + (b - gv) ** 2
+
+    return gray_idx if gray_dist < cube_dist else cube_idx
 
 
 def xterm_to_rgb(code):
@@ -2033,6 +2065,13 @@ class App:
             self.scr.keypad(True)
             self.scr.timeout(200)
 
+    def clamp_scroll(self):
+        self.scroll = max(0, self.scroll)
+        self.detail_scroll = max(0, self.detail_scroll)
+        self.extra_scroll = max(0, self.extra_scroll)
+        self.news_scroll = max(0, self.news_scroll)
+        self.picker_scroll = max(0, self.picker_scroll)
+
     # -- config ------------------------------------------------------------
     def load_config(self):
         try:
@@ -2054,9 +2093,11 @@ class App:
             data["cols"] = self.forced_cols
         try:
             os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
-            with open(CONFIG_PATH, "w", encoding="utf-8") as fh:
+            tmp_path = "%s.tmp.%d" % (CONFIG_PATH, os.getpid())
+            with open(tmp_path, "w", encoding="utf-8") as fh:
                 json.dump(data, fh, indent=2)
                 fh.write("\n")
+            os.replace(tmp_path, CONFIG_PATH)
         except OSError:
             pass
 
@@ -4616,7 +4657,7 @@ def run(scr, args):
             if ch == -1:
                 continue
             if ch == curses.KEY_RESIZE:
-                app.scroll = 0
+                app.clamp_scroll()
                 continue
             if not app.handle(ch):
                 break

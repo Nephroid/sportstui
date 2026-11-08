@@ -1908,6 +1908,94 @@ class TestSportstui(unittest.TestCase):
         vis = app.visible([unrelated_gm, gm_smu_trailing])
         self.assertEqual(vis[0]["id"], "100")  # Pinned to the top!
 
+    def test_fetch_json_gzip_decompression(self):
+        import gzip
+        import json
+        from unittest.mock import MagicMock, patch
+
+        payload = {"status": "ok", "leagues": ["cfb", "nfl"]}
+        compressed = gzip.compress(json.dumps(payload).encode("utf-8"))
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = compressed
+        mock_resp.headers.get.return_value = "gzip"
+        mock_resp.__enter__.return_value = mock_resp
+
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            data = sportstui.fetch_json("https://example.com/test.json")
+            self.assertEqual(data, payload)
+
+    def test_copy_to_clipboard_osc52_fallback(self):
+        import io
+        from unittest.mock import patch
+
+        # When no external clipboard CLI (wl-copy/xclip) exists, fallback to OSC 52
+        with patch("shutil.which", return_value=None):
+            fake_out = io.StringIO()
+            with patch("sys.stdout", fake_out):
+                res = sportstui.copy_to_clipboard("test text")
+                self.assertTrue(res)
+                captured = fake_out.getvalue()
+                self.assertIn("\033]52;c;", captured)
+                self.assertTrue(captured.endswith("\a"))
+
+    def test_hex_to_xterm_euclidean_grayscale(self):
+        # True grayscale values should map into the 232..255 grayscale ramp
+        code = sportstui.hex_to_xterm("808080")
+        self.assertTrue(232 <= code <= 255)
+        # Black and white
+        self.assertEqual(sportstui.hex_to_xterm("000000"), 16)
+        self.assertEqual(sportstui.hex_to_xterm("ffffff"), 231)
+
+    def test_atomic_config_save(self):
+        import json
+        import os
+        import tempfile
+        from unittest.mock import MagicMock, patch
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_cfg = os.path.join(tmpdir, "config.json")
+            with patch.object(sportstui, "CONFIG_PATH", test_cfg):
+                opts = MagicMock()
+                opts.only = None
+                opts.league = "cfb"
+                opts.date = None
+                opts.week = None
+                opts.layout = "grid"
+                opts.cols = None
+                opts.glyphs = "unicode"
+                opts.anim = "hybrid"
+                opts.filter = "all"
+
+                app = sportstui.App(None, opts)
+                app.favs.add("cfb:MICH")
+                app.save_config()
+
+                self.assertTrue(os.path.exists(test_cfg))
+                with open(test_cfg, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                self.assertIn("cfb:MICH", data["favorites"])
+
+    def test_clamp_scroll(self):
+        from unittest.mock import MagicMock
+        opts = MagicMock()
+        opts.only = None
+        opts.league = "cfb"
+        opts.date = None
+        opts.week = None
+        opts.layout = "grid"
+        opts.cols = None
+        opts.glyphs = "unicode"
+        opts.anim = "hybrid"
+        opts.filter = "all"
+
+        app = sportstui.App(None, opts)
+        app.scroll = -5
+        app.detail_scroll = -2
+        app.clamp_scroll()
+        self.assertEqual(app.scroll, 0)
+        self.assertEqual(app.detail_scroll, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
