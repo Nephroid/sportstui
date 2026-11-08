@@ -2,7 +2,9 @@
 """Tests for sportstui."""
 
 import datetime as dt
+import os
 import sys
+import tempfile
 import time
 import unittest
 from pathlib import Path
@@ -18,6 +20,17 @@ sportstui = loader.load_module()
 
 
 class TestSportstui(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._tmp_dir = tempfile.TemporaryDirectory()
+        cls._orig_config_path = sportstui.CONFIG_PATH
+        sportstui.CONFIG_PATH = os.path.join(cls._tmp_dir.name, "config.json")
+
+    @classmethod
+    def tearDownClass(cls):
+        sportstui.CONFIG_PATH = cls._orig_config_path
+        cls._tmp_dir.cleanup()
+
     def test_league_groups_and_filtering(self):
         # All 8 sports leagues have configured group/conference/weight pickers
         for lg in ("cfb", "nfl", "nhl", "nba", "cbb", "mlb", "ufc", "box"):
@@ -1843,6 +1856,7 @@ class TestSportstui(unittest.TestCase):
     def test_hate_watch_tri_state_and_schadenfreude(self):
         opts = sportstui.parse_args(["--glyphs", "emoji"])
         app = sportstui.App(None, opts)
+        app.save_config = lambda: None
         app.league_key = "cfb"
         app.favs.clear()
         app.hated.clear()
