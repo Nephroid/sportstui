@@ -1554,14 +1554,16 @@ class TestSportstui(unittest.TestCase):
         attr_off = app.breathing_attr("red_zone")
         self.assertIsInstance(attr_off, int)
 
-        # 5. Hotkey 'm' cycles modes: strobe -> breathing -> off -> strobe
-        app.anim_mode = "strobe"
+        # 5. Hotkey 'm' cycles modes: hybrid -> strobe -> breathing -> off -> hybrid
+        app.anim_mode = "hybrid"
+        app.handle(ord("m"))
+        self.assertEqual(app.anim_mode, "strobe")
         app.handle(ord("m"))
         self.assertEqual(app.anim_mode, "breathing")
         app.handle(ord("m"))
         self.assertEqual(app.anim_mode, "off")
         app.handle(ord("m"))
-        self.assertEqual(app.anim_mode, "strobe")
+        self.assertEqual(app.anim_mode, "hybrid")
 
         # 6. Real draw_box with strobe renders tactical corner brackets and flashing sitrep badges
         real_app = sportstui.App(None, opts)
@@ -1624,6 +1626,98 @@ class TestSportstui(unittest.TestCase):
             self.assertIn("┃", side_chars)
         finally:
             py_time.time = orig_time
+
+    def test_dynamic_leverage_escalation_option_b(self):
+        """Test Option B Dynamic Leverage Escalation across time, score, and situation."""
+        opts = sportstui.parse_args([])
+        app = sportstui.App(None, opts)
+        app.anim_mode = "hybrid"
+
+        # 1. Red Zone: Q1 1st & 10 at 18 (build-up) -> breathing, alert=None
+        game_rz_buildup = {
+            "id": "1", "state": "in", "league": "nfl", "period": 1, "clock": "11:20",
+            "away": {"id": "1", "abbr": "DET", "name": "Lions", "color": "0076B6", "score": "0", "score_int": 0},
+            "home": {"id": "2", "abbr": "GB", "name": "Packers", "color": "203731", "score": "0", "score_int": 0},
+            "situation": {"red_zone": True, "down": 1, "down_dist": "1st & 10 at GB 18", "yard_line": 82},
+        }
+        captured = []
+        app.draw_box = lambda y, x, h, w, attr, title="", heavy=False, alert=None, **kw: captured.append((heavy, alert))
+        app.put = lambda *a, **kw: None
+        app.fill_line = lambda *a, **kw: None
+        app.segment = lambda *a, **kw: None
+
+        app.draw_card(game_rz_buildup, 0, 0, 42, False)
+        self.assertEqual(len(captured), 1)
+        heavy, alert = captured[0]
+        self.assertTrue(heavy)
+        self.assertIsNone(alert)  # Breathing pulse (alert is None)
+
+        # 2. Red Zone: Q1 1st & Goal at 3 (inside 5) -> escalates to Strobe
+        game_rz_goal = dict(game_rz_buildup)
+        game_rz_goal["situation"] = {"red_zone": True, "down": 1, "down_dist": "1st & Goal at GB 3", "yard_line": 97}
+        captured.clear()
+        app.draw_card(game_rz_goal, 0, 0, 42, False)
+        self.assertEqual(len(captured), 1)
+        heavy, alert = captured[0]
+        self.assertTrue(heavy)
+        self.assertIsNotNone(alert)
+        self.assertEqual(alert["sitrep"], "1ST & GOAL")
+
+        # 3. Red Zone: Q4 01:45, 21-24, 2nd & 6 at GB 14 (Late & Close 1-possession) -> escalates to Strobe
+        game_rz_clutch = dict(game_rz_buildup)
+        game_rz_clutch["period"] = 4
+        game_rz_clutch["clock"] = "01:45"
+        game_rz_clutch["away"] = {"id": "1", "abbr": "DET", "name": "Lions", "color": "0076B6", "score": "21", "score_int": 21}
+        game_rz_clutch["home"] = {"id": "2", "abbr": "GB", "name": "Packers", "color": "203731", "score": "24", "score_int": 24}
+        game_rz_clutch["situation"] = {"red_zone": True, "down": 2, "down_dist": "2nd & 6 at GB 14", "yard_line": 86}
+        captured.clear()
+        app.draw_card(game_rz_clutch, 0, 0, 42, False)
+        self.assertEqual(len(captured), 1)
+        heavy, alert = captured[0]
+        self.assertTrue(heavy)
+        self.assertIsNotNone(alert)
+
+        # 4. Red Zone: Q3 07:15, 7-35 blowout -> breathes (alert is None)
+        game_rz_blowout = dict(game_rz_buildup)
+        game_rz_blowout["period"] = 3
+        game_rz_blowout["clock"] = "07:15"
+        game_rz_blowout["away"] = {"id": "1", "abbr": "DET", "name": "Lions", "color": "0076B6", "score": "7", "score_int": 7}
+        game_rz_blowout["home"] = {"id": "2", "abbr": "GB", "name": "Packers", "color": "203731", "score": "35", "score_int": 35}
+        game_rz_blowout["situation"] = {"red_zone": True, "down": 2, "down_dist": "2nd & 4 at GB 11", "yard_line": 89}
+        captured.clear()
+        app.draw_card(game_rz_blowout, 0, 0, 42, False)
+        self.assertEqual(len(captured), 1)
+        heavy, alert = captured[0]
+        self.assertTrue(heavy)
+        self.assertIsNone(alert)  # Breathing pulse
+
+        # 5. Upset: Q1 early lead -> breathes (alert is None)
+        game_up_early = {
+            "id": "10", "state": "in", "league": "cfb", "period": 1, "clock": "08:30",
+            "away": {"id": "1", "abbr": "VAN", "name": "Vanderbilt", "color": "000000", "score": "7", "score_int": 7},
+            "home": {"id": "2", "abbr": "ALA", "name": "Alabama", "color": "9E1B32", "score": "0", "score_int": 0},
+            "upset": {"underdog": {"abbr": "VAN"}, "favorite": {"abbr": "ALA"}, "confirmed": False},
+        }
+        captured.clear()
+        app.draw_card(game_up_early, 0, 0, 42, False)
+        self.assertEqual(len(captured), 1)
+        heavy, alert = captured[0]
+        self.assertTrue(heavy)
+        self.assertIsNone(alert)  # Early upset breathes
+
+        # 6. Upset: Q4 late lead -> escalates to Strobe
+        game_up_late = dict(game_up_early)
+        game_up_late["period"] = 4
+        game_up_late["clock"] = "03:15"
+        game_up_late["away"] = {"id": "1", "abbr": "VAN", "name": "Vanderbilt", "color": "000000", "score": "33", "score_int": 33}
+        game_up_late["home"] = {"id": "2", "abbr": "ALA", "name": "Alabama", "color": "9E1B32", "score": "28", "score_int": 28}
+        captured.clear()
+        app.draw_card(game_up_late, 0, 0, 42, False)
+        self.assertEqual(len(captured), 1)
+        heavy, alert = captured[0]
+        self.assertTrue(heavy)
+        self.assertIsNotNone(alert)  # Late upset strobes
+        self.assertEqual(alert["sitrep"], "VAN LEADS ALA")
 
 
 if __name__ == "__main__":

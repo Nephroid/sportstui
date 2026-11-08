@@ -1765,7 +1765,7 @@ class App:
         self.glyphs = opts.glyphs or self.cfg.get("glyphs") or "nerd"
         loaded_anim = getattr(opts, "anim", None) or self.cfg.get("animation")
         if not loaded_anim or loaded_anim == "marquee":
-            loaded_anim = "strobe"
+            loaded_anim = "hybrid"
         self.anim_mode = loaded_anim
         self.view = "board"          # board | extra | detail | news | help | group_picker
         self.filter = "all"
@@ -1931,8 +1931,8 @@ class App:
             return curses.A_BOLD
 
         has_256 = self.colours and getattr(curses, "COLORS", 0) >= 256
-        mode = getattr(self, "anim_mode", "strobe")
-        if mode in ("off", "strobe"):
+        mode = getattr(self, "anim_mode", "hybrid")
+        if mode == "off":
             if kind == "red_zone":
                 return self.pair(196) | curses.A_BOLD if has_256 else (self.pair(getattr(curses, "COLOR_RED", 1)) | curses.A_BOLD)
             if kind == "upset":
@@ -1967,6 +1967,88 @@ class App:
                 return self.pair(getattr(curses, "COLOR_WHITE", 7) if phase == 2 else getattr(curses, "COLOR_YELLOW", 3)) | curses.A_BOLD
 
         return self.attr("accent")
+
+    def is_alert_escalated(self, game, kind):
+        """Dynamic Leverage Escalation (Option B):
+        Returns True if the game situation warrants Two-Phase Strobe (#3),
+        or False if it should use the smooth Breathing Pulse (#1).
+
+        Red Zone escalates when:
+          - 4th down in the Red Zone (do-or-die)
+          - Inside the 5-yard line (Goal-to-Go)
+          - Overtime (OT)
+          - 4th Quarter with score differential <= 8 (one-possession game)
+          - Under 2:00 in 2nd or 4th Quarter (2-minute drill) with score differential <= 8
+
+        Upset Watch escalates when:
+          - Confirmed final upset
+          - 2nd half (period >= 3 in 4-period sports or period >= 2 in CBB) with score diff <= 10 or clock <= 5:00
+        """
+        if not game:
+            return False
+
+        period = game.get("period", 0)
+        clock = game.get("clock", "")
+        clock_secs = 9999
+        if clock:
+            parts = str(clock).strip().split(":")
+            try:
+                if len(parts) == 2:
+                    clock_secs = int(parts[0]) * 60 + int(float(parts[1]))
+                elif len(parts) == 1:
+                    clock_secs = int(float(parts[0]))
+            except (ValueError, TypeError):
+                clock_secs = 9999
+
+        sa = game.get("away", {}).get("score_int", 0)
+        sh = game.get("home", {}).get("score_int", 0)
+        diff = abs(sa - sh)
+        is_ot = game.get("is_overtime", False) or period > 4
+
+        if kind == "red_zone":
+            sit = game.get("situation")
+            if not sit:
+                return False
+            down = sit.get("down")
+            dd = (sit.get("down_dist") or "").lower()
+            yl = sit.get("yard_line")
+
+            # a) 4th down in red zone
+            if down == 4 or "4th" in dd:
+                return True
+            # b) Inside the 5-yd line (goal line)
+            if isinstance(yl, int) and (0 < yl <= 5 or 95 <= yl < 100):
+                return True
+            if "goal at " in dd:
+                try:
+                    yn = dd.split("goal at ")[-1].strip().split()[-1]
+                    if yn.isdigit() and int(yn) <= 5:
+                        return True
+                except Exception:
+                    pass
+            if any("goal at %d" % n in dd for n in (1, 2, 3, 4, 5)):
+                return True
+            # c) 4th Quarter or OT with 1-score game (diff <= 8)
+            if (period >= 4 and diff <= 8) or is_ot:
+                return True
+            # d) 2-minute drill in 2nd quarter or 4th quarter with diff <= 8
+            if period in (2, 4) and clock_secs <= 120 and diff <= 8:
+                return True
+            return False
+
+        if kind == "upset":
+            up = game.get("upset")
+            if not up:
+                return False
+            if up.get("confirmed"):
+                return True
+            # 2nd half: period >= 3 in football/basketball, period >= 2 in CBB
+            is_2nd_half = (period >= 3 or is_ot or (game.get("league") == "cbb" and period >= 2))
+            if is_2nd_half and (diff <= 10 or clock_secs <= 300):
+                return True
+            return False
+
+        return False
 
     # -- data --------------------------------------------------------------
     def cache_get(self, key):
@@ -2169,10 +2251,10 @@ class App:
         inner = max(0, width - 2)
 
         has_256 = self.colours and getattr(curses, "COLORS", 0) >= 256
-        mode = getattr(self, "anim_mode", "strobe")
+        mode = getattr(self, "anim_mode", "hybrid")
 
         # Two-Phase Strobe / Tactical Corner Brackets & Flashing Badge (Option #3)
-        if alert and mode == "strobe":
+        if alert and mode in ("strobe", "hybrid"):
             if isinstance(alert, str):
                 alert = {"kind": alert}
             kind = alert.get("kind", "red_zone")
@@ -2819,11 +2901,12 @@ class App:
         if game.get("rivalry"):
             riv_lbl = ("  %s %s" % (g["rivalry"], game["rivalry"].upper())) if width >= 105 else ("  %s RIVALRY" % g["rivalry"])
             segs.append((riv_lbl, self.attr("accent")))
-        mode = getattr(self, "anim_mode", "strobe")
+        mode = getattr(self, "anim_mode", "hybrid")
         has_256 = self.colours and getattr(curses, "COLORS", 0) >= 256
         phase = int(time.time() * 2.5) % 2
         if up:
-            if mode == "strobe":
+            use_strobe_up = (mode == "strobe") or (mode == "hybrid" and self.is_alert_escalated(game, "upset"))
+            if use_strobe_up:
                 if phase == 0:
                     lbl = ("  [ %s UPSET ]" % g["upset"]) if up["confirmed"] else ("  [ %s UPSET WATCH ]" % g["upset_watch"])
                     attr = self.pair(16, 214) | curses.A_BOLD if has_256 else (curses.A_REVERSE | curses.A_BOLD)
@@ -2840,7 +2923,8 @@ class App:
                 attr = self.breathing_attr("upset")
             segs.append((lbl, attr))
         if live and sit and sit.get("red_zone"):
-            if mode == "strobe":
+            use_strobe_rz = (mode == "strobe") or (mode == "hybrid" and self.is_alert_escalated(game, "red_zone"))
+            if use_strobe_rz:
                 if phase == 0:
                     lbl = "  [ %s RED ZONE ]" % g["red_zone"]
                     attr = self.pair(16, 196) | curses.A_BOLD if has_256 else (curses.A_REVERSE | curses.A_BOLD)
@@ -2952,7 +3036,7 @@ class App:
 
         heavy = bool(selected or up or red_zone or game.get("rivalry"))
         alert_kind = "red_zone" if red_zone else ("upset" if up else None)
-        mode = getattr(self, "anim_mode", "strobe")
+        mode = getattr(self, "anim_mode", "hybrid")
 
         alert_dict = None
         if alert_kind:
@@ -3029,7 +3113,14 @@ class App:
         else:
             border_attr = self.attr("dim")
 
-        if alert_dict and mode == "strobe":
+        use_strobe = False
+        if alert_dict:
+            if mode == "strobe":
+                use_strobe = True
+            elif mode == "hybrid":
+                use_strobe = self.is_alert_escalated(game, alert_kind)
+
+        if alert_dict and use_strobe:
             self.draw_box(y, x, 5, cw, border_attr, title=title_str, heavy=heavy, alert=alert_dict)
         elif box_marquee:
             self.draw_box(y, x, 5, cw, border_attr, title=title_str, heavy=heavy, marquee=box_marquee)
@@ -3592,7 +3683,7 @@ class App:
             ("  a / h (or ! / @)    Star / unstar away/blue or home/red corner as favorite", "base"),
             ("  c / C               Copy selected game (c) or whole board (C) for Discord", "base"),
             ("  $ / B               Launch Vegas Sportsbook board (vegastui)", "base"),
-            ("  m                   Cycle alert animation: strobe / breathing / off", "base"),
+            ("  m                   Cycle alert animation: hybrid / strobe / breathing / off", "base"),
             ("  g                   Cycle icon set: nerd / unicode / emoji / ascii", "base"),
             ("  r                   Force refresh immediately", "base"),
             ("  Esc                 Back to scoreboard", "base"),
@@ -3775,9 +3866,9 @@ class App:
             self.say("glyphs: %s" % self.glyphs)
             return True
         if ch in (ord("m"), ord("M")):
-            modes = ["strobe", "breathing", "off"]
-            cur = getattr(self, "anim_mode", "strobe")
-            self.anim_mode = modes[(modes.index(cur) + 1) % len(modes)] if cur in modes else "strobe"
+            modes = ["hybrid", "strobe", "breathing", "off"]
+            cur = getattr(self, "anim_mode", "hybrid")
+            self.anim_mode = modes[(modes.index(cur) + 1) % len(modes)] if cur in modes else "hybrid"
             self.save_config()
             self.say("animation: %s" % self.anim_mode)
             return True
@@ -4173,8 +4264,8 @@ def build_parser(prog="sportstui"):
     parser.add_argument("--layout", choices=["grid", "list"])
     parser.add_argument("--cols", "-c", type=int, help="number of grid columns (default: auto reflow)")
     parser.add_argument("--glyphs", choices=list(GLYPHS))
-    parser.add_argument("--anim", "--animation", choices=["strobe", "breathing", "marquee", "off"],
-                        help="alert card border animation style: strobe, breathing, marquee, or off (default: strobe)")
+    parser.add_argument("--anim", "--animation", choices=["hybrid", "strobe", "breathing", "off"],
+                        help="alert card border animation style: hybrid, strobe, breathing, or off (default: hybrid)")
     parser.add_argument("--plain", action="store_true", help="print the board and exit")
     parser.add_argument("--version", action="version", version="%s %s" % (prog, VERSION))
     return parser
